@@ -1045,21 +1045,6 @@
             }
         }
         
-        // Placeholder for Strava connection
-        function connectStrava() {
-            if (!stravaEnabled) {
-                showError('Strava integration is not enabled');
-                return;
-            }
-            // TODO: Implement Strava OAuth flow
-            alert('Strava connection will be implemented here');
-        }
-        
-        // Load config on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            loadConfig();
-        });
-        
         // Handle multiple file selection for comparison
         function handleCompareFilesSelect(event) {
             const files = Array.from(event.target.files);
