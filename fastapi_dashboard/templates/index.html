@@ -1444,6 +1444,15 @@
 
                 console.log('Analysis data received:', data);
                 displayResults(data);
+                
+                // Re-enable button after successful analysis
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                if (analyzeBtn && selectedFile) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.style.opacity = '1';
+                    analyzeBtn.style.cursor = 'pointer';
+                    analyzeBtn.textContent = '📊 Begin Analysis';
+                }
 
             } catch (error) {
                 console.error('Error analyzing file:', error);
@@ -1452,6 +1461,8 @@
                 const analyzeBtn = document.getElementById('analyzeBtn');
                 if (analyzeBtn && selectedFile) {
                     analyzeBtn.disabled = false;
+                    analyzeBtn.style.opacity = '1';
+                    analyzeBtn.style.cursor = 'pointer';
                     analyzeBtn.textContent = '📊 Begin Analysis';
                 }
             } finally {
