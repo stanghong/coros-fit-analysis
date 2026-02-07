@@ -1985,7 +1985,7 @@
             window.location.href = '/strava/login';
         }
         
-        // Import latest activity from Strava
+        // Import latest activities from Strava
         async function importLatestActivity() {
             if (!stravaEnabled) {
                 showError('Strava integration is not enabled');
@@ -1994,10 +1994,13 @@
             
             const importBtn = document.getElementById('stravaImportBtn');
             const statusDiv = document.getElementById('stravaImportStatus');
+            const activitiesList = document.getElementById('stravaActivitiesList');
+            const activitiesContainer = document.getElementById('stravaActivitiesContainer');
             
             importBtn.disabled = true;
-            importBtn.textContent = 'Importing...';
+            importBtn.textContent = 'Loading...';
             statusDiv.innerHTML = '<p style="color: #667eea;">Fetching activities from Strava...</p>';
+            if (activitiesList) activitiesList.style.display = 'none';
             
             try {
                 const response = await fetch('/strava/import-latest');
@@ -2007,22 +2010,112 @@
                 }
                 
                 const data = await response.json();
-                statusDiv.innerHTML = `
-                    <p style="color: #2ecc71; font-weight: bold;">✓ Successfully imported ${data.count} activities</p>
-                    <p style="font-size: 0.9em; color: #666; margin-top: 10px;">
-                        Activities fetched. Next step: Select an activity to analyze.
-                    </p>
-                `;
                 
-                // TODO: Display activities list and allow selection for analysis
-                console.log('Imported activities:', data.activities);
+                if (data.activities && data.activities.length > 0) {
+                    // Filter for swimming activities
+                    const swimActivities = data.activities.filter(a => a.is_swim);
+                    
+                    if (swimActivities.length === 0) {
+                        statusDiv.innerHTML = `
+                            <p style="color: #f39c12; font-weight: bold;">⚠ No swimming activities found</p>
+                            <p style="font-size: 0.9em; color: #666; margin-top: 10px;">
+                                Found ${data.count} activities, but none are swimming workouts.
+                            </p>
+                        `;
+                    } else {
+                        statusDiv.innerHTML = `
+                            <p style="color: #2ecc71; font-weight: bold;">✓ Found ${swimActivities.length} swimming activities</p>
+                        `;
+                        
+                        // Display activities list
+                        if (activitiesContainer) {
+                            activitiesContainer.innerHTML = '';
+                            swimActivities.forEach(activity => {
+                                const activityDiv = document.createElement('div');
+                                activityDiv.style.cssText = 'padding: 15px; margin: 10px 0; background: #f8f9ff; border-radius: 8px; border-left: 4px solid #667eea; cursor: pointer;';
+                                activityDiv.onmouseover = function() { this.style.background = '#e8f0ff'; };
+                                activityDiv.onmouseout = function() { this.style.background = '#f8f9ff'; };
+                                
+                                const distanceKm = (activity.distance / 1000).toFixed(2);
+                                const durationMin = Math.floor(activity.duration / 60);
+                                const date = new Date(activity.start_date).toLocaleDateString();
+                                const safeName = (activity.name || 'Swimming Workout').replace(/'/g, "\\'");
+                                
+                                activityDiv.innerHTML = `
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <strong style="color: #667eea;">${safeName}</strong>
+                                            <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
+                                                ${distanceKm} km • ${durationMin} min • ${date}
+                                            </p>
+                                        </div>
+                                        <button class="upload-btn" style="padding: 8px 20px; font-size: 0.9em;" 
+                                                onclick="analyzeStravaActivity(${activity.id}, '${safeName}')">
+                                            Analyze
+                                        </button>
+                                    </div>
+                                `;
+                                activitiesContainer.appendChild(activityDiv);
+                            });
+                        }
+                        
+                        if (activitiesList) activitiesList.style.display = 'block';
+                    }
+                } else {
+                    statusDiv.innerHTML = '<p style="color: #f39c12;">No activities found</p>';
+                }
                 
             } catch (error) {
                 statusDiv.innerHTML = `<p style="color: #e74c3c;">Error: ${error.message}</p>`;
                 showError(error.message);
             } finally {
                 importBtn.disabled = false;
-                importBtn.textContent = 'Import Latest Activity';
+                importBtn.textContent = 'Load Activities';
+            }
+        }
+        
+        // Analyze a Strava activity
+        async function analyzeStravaActivity(activityId, activityName) {
+            if (!stravaEnabled) {
+                showError('Strava integration is not enabled');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('error').classList.remove('show');
+            
+            try {
+                const response = await fetch(`/strava/analyze-activity/${activityId}`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to analyze activity');
+                }
+                
+                const data = await response.json();
+                
+                if (!data || Object.keys(data).length === 0) {
+                    throw new Error('No data returned from server');
+                }
+                
+                console.log('Analysis data received:', data);
+                
+                // Display results using existing function
+                displayResults(data);
+                
+                // Switch to single workout tab to show results
+                switchTab('single');
+                document.getElementById('results').classList.add('show');
+                
+            } catch (error) {
+                console.error('Error analyzing Strava activity:', error);
+                showError(error.message || 'Failed to analyze Strava activity. Please check the console for details.');
+            } finally {
+                document.getElementById('loading').classList.remove('show');
             }
         }
         
