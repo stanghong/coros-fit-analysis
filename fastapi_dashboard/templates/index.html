@@ -718,12 +718,20 @@
         {% if strava_enabled %}
         <div id="stravaSection" class="tab-section" style="display: none;">
             <div class="upload-section">
-                <div class="upload-box">
+                <div class="upload-box" id="stravaConnectBox">
                     <p style="font-size: 1.2em; margin-bottom: 20px;">🔗 Connect Your Strava Account</p>
                     <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">Sync your workouts from Strava for automatic analysis</p>
                     <button class="upload-btn" id="stravaConnectBtn" onclick="connectStrava()">
                         Connect Strava
                     </button>
+                </div>
+                <div class="upload-box" id="stravaImportBox" style="display: none; margin-top: 20px;">
+                    <p style="font-size: 1.2em; margin-bottom: 20px;">✅ Connected to Strava</p>
+                    <p id="stravaAthleteInfo" style="font-size: 0.9em; color: #666; margin-bottom: 15px;"></p>
+                    <button class="upload-btn" id="stravaImportBtn" onclick="importLatestActivity()">
+                        Import Latest Activity
+                    </button>
+                    <div id="stravaImportStatus" style="margin-top: 15px;"></div>
                 </div>
             </div>
         </div>

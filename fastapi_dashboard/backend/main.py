@@ -24,6 +24,11 @@ from comparison_engine import analyze_multiple_workouts
 
 app = FastAPI(title="Swimming Workout Dashboard", version="1.0.0")
 
+# Import Strava OAuth routes if enabled
+if STRAVA_ENABLED:
+    from strava_oauth import router as strava_router
+    app.include_router(strava_router)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +76,12 @@ async def get_config():
     return {
         "strava_enabled": STRAVA_ENABLED
     }
+
+
+# Import Strava OAuth routes if enabled
+if STRAVA_ENABLED:
+    from strava_oauth import router as strava_router
+    app.include_router(strava_router)
 
 
 @app.post("/api/analyze")
