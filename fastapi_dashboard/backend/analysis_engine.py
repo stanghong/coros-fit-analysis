@@ -267,6 +267,77 @@ def score_swim_workout(metrics: Dict, workout_type: str) -> Tuple[str, Dict, int
     return grade, sub_scores, total_score
 
 
+def generate_coach_summary(grade: str, sub_scores: Dict, workout_type: str, metrics: Dict, pros: List[str], cons: List[str]) -> Dict:
+    """Generate a concise coach summary: headline, constraint, action."""
+    summary = {}
+    
+    # Headline: What went well (1 sentence)
+    # Use the best performing metric or top pro
+    best_score_key = max(sub_scores, key=sub_scores.get)
+    best_score = sub_scores[best_score_key]
+    
+    if best_score >= 20:
+        if best_score_key == 'pace_consistency':
+            summary['headline'] = "Your pacing was rock-solid today — consistent speed shows great control."
+        elif best_score_key == 'distance_endurance':
+            summary['headline'] = "Strong endurance performance — you sustained volume well throughout."
+        elif best_score_key == 'stroke_stability':
+            summary['headline'] = "Excellent stroke rhythm — your technique held up under fatigue."
+        elif best_score_key == 'speed_gears':
+            summary['headline'] = "Great speed variation — you used multiple gears effectively."
+        else:
+            summary['headline'] = pros[0] if pros else "Solid session — you executed well today."
+    elif grade == "A":
+        summary['headline'] = "Outstanding session — strong execution across all metrics."
+    elif grade == "B":
+        summary['headline'] = "Good effort today — you're building consistency."
+    else:
+        summary['headline'] = "Session completed — every swim builds your base."
+    
+    # Constraint: What limited performance (1 sentence)
+    # Use the lowest scoring metric or top con
+    min_score_key = min(sub_scores, key=sub_scores.get)
+    min_score = sub_scores[min_score_key]
+    
+    if min_score < 15:
+        if min_score_key == 'speed_gears':
+            summary['constraint'] = "Missing speed gears — you stayed in one pace zone, limiting training stimulus."
+        elif min_score_key == 'pace_consistency':
+            summary['constraint'] = "Pacing was too variable — inconsistent splits cost efficiency."
+        elif min_score_key == 'stroke_stability':
+            summary['constraint'] = "Stroke rate dropped late — technique broke down as fatigue set in."
+        elif min_score_key == 'distance_endurance':
+            summary['constraint'] = "Distance was limited — volume needs to build gradually."
+        else:
+            summary['constraint'] = cons[0] if cons else "Room for improvement in key areas."
+    elif metrics.get('stop_percentage', 0) > 15:
+        summary['constraint'] = "Too many interruptions — frequent stops disrupted your rhythm."
+    elif metrics.get('speed_cv', 0) > 12:
+        summary['constraint'] = "Pacing was chaotic — speed swings made the session less effective."
+    else:
+        summary['constraint'] = cons[0] if cons else "Some areas need more focus."
+    
+    # Action: What to do next session (1 sentence)
+    # Based on the prescription key focus
+    prescription = prescribe_next_workout(grade, sub_scores, workout_type, metrics)
+    key_focus = prescription.get('key_focus', 'Aerobic base')
+    
+    if min_score_key == 'speed_gears':
+        summary['action'] = "Next session: Add speed intervals — try 8×50 fast with full recovery to develop speed gear."
+    elif min_score_key == 'pace_consistency':
+        summary['action'] = "Next session: Focus on even pacing — do 6×200 where rep 1 feels 'too easy' to build control."
+    elif min_score_key == 'stroke_stability':
+        summary['action'] = "Next session: Work on stroke count — do 10×100 counting strokes per length to maintain rhythm."
+    elif min_score_key == 'distance_endurance':
+        summary['action'] = "Next session: Build volume gradually — try 3×500 continuous to extend your aerobic base."
+    elif metrics.get('stop_percentage', 0) > 15:
+        summary['action'] = "Next session: Reduce rest time — shorten breaks to 10-15s to build continuous swimming capacity."
+    else:
+        summary['action'] = f"Next session: Focus on {key_focus.lower()} — {prescription.get('main_set', 'Continue building consistency.')}"
+    
+    return summary
+
+
 def generate_verdict(grade: str, sub_scores: Dict, workout_type: str, metrics: Dict) -> str:
     """Generate one-line verdict based on grade and metrics."""
     if grade == "A":
@@ -438,6 +509,7 @@ def analyze_workout(df: pd.DataFrame) -> Dict:
     verdict = generate_verdict(grade, sub_scores, workout_type, metrics)
     pros, cons = generate_pros_cons(metrics, sub_scores, workout_type)
     prescription = prescribe_next_workout(grade, sub_scores, workout_type, metrics)
+    coach_summary = generate_coach_summary(grade, sub_scores, workout_type, metrics, pros, cons)
     
     # Prepare result with all data
     result = {
@@ -465,6 +537,7 @@ def analyze_workout(df: pd.DataFrame) -> Dict:
         'sub_scores': sub_scores,
         'total_score': total_score,
         'verdict': verdict,
+        'coach_summary': coach_summary,
         'pros': pros,
         'cons': cons,
         'prescription': prescription

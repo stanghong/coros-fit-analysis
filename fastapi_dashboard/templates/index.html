@@ -92,6 +92,57 @@
             display: block;
         }
         
+        .coach-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .coach-summary h2 {
+            color: white;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .coach-summary-item {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid white;
+        }
+        
+        .coach-summary-item strong {
+            display: block;
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .coach-summary-item p {
+            margin: 0;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        
+        .coach-summary .headline {
+            border-left-color: #2ecc71;
+        }
+        
+        .coach-summary .constraint {
+            border-left-color: #f39c12;
+        }
+        
+        .coach-summary .action {
+            border-left-color: #3498db;
+        }
+        
         .grade-section {
             text-align: center;
             padding: 30px;
@@ -650,6 +701,23 @@
         
         <!-- Single Workout Results -->
         <div class="results" id="results">
+            <!-- Coach Summary Section -->
+            <div class="coach-summary" id="coachSummary" style="display: none;">
+                <h2>🎯 Coach Summary</h2>
+                <div class="coach-summary-item headline">
+                    <strong>What Went Well</strong>
+                    <p id="coachHeadline"></p>
+                </div>
+                <div class="coach-summary-item constraint">
+                    <strong>What Limited Performance</strong>
+                    <p id="coachConstraint"></p>
+                </div>
+                <div class="coach-summary-item action">
+                    <strong>Next Session Action</strong>
+                    <p id="coachAction"></p>
+                </div>
+            </div>
+            
             <!-- Grade Section -->
             <div class="grade-section">
                 <div class="grade-letter" id="gradeLetter"></div>
@@ -1254,6 +1322,15 @@
         }
         
         function displayResults(data) {
+            // Coach Summary
+            const coachSummary = data.coach_summary || {};
+            if (coachSummary.headline) {
+                document.getElementById('coachHeadline').textContent = coachSummary.headline;
+                document.getElementById('coachConstraint').textContent = coachSummary.constraint || 'No constraint identified.';
+                document.getElementById('coachAction').textContent = coachSummary.action || 'Continue building consistency.';
+                document.getElementById('coachSummary').style.display = 'block';
+            }
+            
             // Grade
             const gradeLetter = document.getElementById('gradeLetter');
             gradeLetter.textContent = data.grade;
