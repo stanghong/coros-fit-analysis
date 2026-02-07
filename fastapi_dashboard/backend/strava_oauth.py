@@ -5,8 +5,13 @@ Strava OAuth integration for importing workouts.
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 import os
-import httpx
 from typing import Optional
+
+try:
+    import httpx
+except ImportError:
+    httpx = None
+    print("Warning: httpx not installed. Strava features will not work.")
 
 router = APIRouter(prefix="/strava", tags=["strava"])
 
@@ -25,6 +30,12 @@ async def strava_login():
     """
     Redirect user to Strava OAuth authorization page.
     """
+    if httpx is None:
+        raise HTTPException(
+            status_code=500,
+            detail="httpx library not installed. Please install dependencies: pip install httpx"
+        )
+    
     if not STRAVA_CLIENT_ID or not STRAVA_REDIRECT_URI:
         raise HTTPException(
             status_code=500,
@@ -58,6 +69,12 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
         raise HTTPException(
             status_code=500,
             detail="Strava OAuth not configured. Please set STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, and STRAVA_REDIRECT_URI."
+        )
+    
+    if httpx is None:
+        raise HTTPException(
+            status_code=500,
+            detail="httpx library not installed. Please install dependencies: pip install httpx"
         )
     
     # Exchange authorization code for access token
@@ -121,6 +138,12 @@ async def import_latest_activity():
         raise HTTPException(
             status_code=401,
             detail="No access token found. Please reconnect your Strava account."
+        )
+    
+    if httpx is None:
+        raise HTTPException(
+            status_code=500,
+            detail="httpx library not installed. Please install dependencies: pip install httpx"
         )
     
     # Fetch athlete activities from Strava API

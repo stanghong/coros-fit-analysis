@@ -75,8 +75,15 @@ async def get_config():
 
 # Import Strava OAuth routes if enabled
 if STRAVA_ENABLED:
-    from strava_oauth import router as strava_router
-    app.include_router(strava_router)
+    try:
+        from strava_oauth import router as strava_router
+        app.include_router(strava_router)
+    except ImportError as e:
+        print(f"Warning: Could not import Strava OAuth routes: {e}")
+        print("Strava features will be disabled.")
+    except Exception as e:
+        print(f"Warning: Error setting up Strava OAuth: {e}")
+        print("Strava features will be disabled.")
 
 
 @app.post("/api/analyze")
