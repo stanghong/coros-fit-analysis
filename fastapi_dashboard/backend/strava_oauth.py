@@ -78,6 +78,7 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
         )
     
     # Exchange authorization code for access token
+    # IMPORTANT: The redirect_uri must match EXACTLY what was used in the authorization request
     try:
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
@@ -86,7 +87,8 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
                     "client_id": STRAVA_CLIENT_ID,
                     "client_secret": STRAVA_CLIENT_SECRET,
                     "code": code,
-                    "grant_type": "authorization_code"
+                    "grant_type": "authorization_code",
+                    "redirect_uri": STRAVA_REDIRECT_URI  # Must match authorization request
                 },
                 timeout=10.0
             )
