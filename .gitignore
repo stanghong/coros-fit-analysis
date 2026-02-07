@@ -60,6 +60,7 @@ fastapi_dashboard/static/*
 !fastapi_dashboard/TROUBLESHOOTING.md
 !fastapi_dashboard/SWIMMING_DASHBOARD_DOCUMENTATION.md
 !fastapi_dashboard/requirements.txt
+!fastapi_dashboard/runtime.txt
 !requirements.txt
 
 # Environment variables
