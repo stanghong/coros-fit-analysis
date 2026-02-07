@@ -242,13 +242,18 @@ async def strava_status():
 
 
 @router.post("/analyze-activities")
-async def analyze_multiple_strava_activities(activity_ids: List[int]):
+async def analyze_multiple_strava_activities(request: Request):
     """
     Analyze multiple Strava activities and compare them.
     
-    Args:
-        activity_ids: List of Strava activity IDs to analyze
+    Request body: JSON array of activity IDs [123, 456, 789]
     """
+    try:
+        activity_ids = await request.json()
+        if not isinstance(activity_ids, list):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON array of activity IDs")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {str(e)}")
     user_id = "default_user"  # TODO: Get from session
     
     if user_id not in strava_tokens:
