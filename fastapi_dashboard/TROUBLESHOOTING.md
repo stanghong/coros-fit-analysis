@@ -1,90 +1,132 @@
 # Troubleshooting Guide
 
-## Issue: Nothing happens when uploading CSV file
+## Common Issues and Solutions
 
-### Step 1: Check Browser Console
-1. Open browser Developer Tools (F12 or Right-click → Inspect)
-2. Go to **Console** tab
-3. Try uploading a file
-4. Look for any red error messages
+### Import Errors
 
-**Common errors to look for:**
-- `Failed to fetch` → Server not running or wrong URL
-- `404 Not Found` → API endpoint not found
-- `500 Internal Server Error` → Backend error (check server logs)
-- JavaScript errors → Frontend code issue
+**Error: "Could not import module 'app'"**
 
-### Step 2: Check Network Tab
-1. In Developer Tools, go to **Network** tab
-2. Try uploading a file
-3. Look for a request to `/api/analyze`
-4. Check:
-   - **Status**: Should be 200 (green) or error code (red)
-   - **Response**: Click on the request to see server response
-   - **Request**: Check if file is being sent
+This usually happens when running uvicorn from the wrong directory or with incorrect module path.
 
-### Step 3: Check Server Logs
-Look at the terminal where you started the server. You should see:
-```
-Received file upload request: [filename]
-File size: [bytes] bytes
-CSV loaded: [rows] rows, [cols] columns
-Starting analysis...
-Analysis complete
-Returning analysis results
-```
+**Solution:**
+- If running from `fastapi_dashboard/` directory:
+  ```bash
+  uvicorn backend.main:app --reload
+  ```
+- If running from `fastapi_dashboard/backend/` directory:
+  ```bash
+  uvicorn main:app --reload
+  ```
+- Or use the start script:
+  ```bash
+  ./start.sh
+  ```
 
-If you see errors here, that's where the problem is.
+**Error: "ModuleNotFoundError: No module named 'strava_oauth'"**
 
-### Step 4: Test the API Directly
+This happens when `STRAVA_ENABLED=true` but the module can't be imported.
 
-Test if the server is responding:
+**Solution:**
+- Make sure you're running from the correct directory
+- Check that `fastapi_dashboard/backend/strava_oauth.py` exists
+- If Strava is not needed, set `STRAVA_ENABLED=false`
+
+### Port Already in Use
+
+**Error: "Address already in use"**
+
+**Solution:**
+- Change the port in `backend/main.py`:
+  ```python
+  uvicorn.run(app, host="0.0.0.0", port=8001)  # Use port 8001
+  ```
+- Or kill the process using port 8000:
+  ```bash
+  lsof -ti:8000 | xargs kill -9
+  ```
+
+### File Upload Not Working
+
+**Issues:**
+- File not uploading
+- "No file selected" error
+- Analysis fails
+
+**Solutions:**
+- Check that the file is a valid CSV
+- Ensure the CSV has the expected Coros format columns
+- Check browser console for errors
+- Verify file size is reasonable (< 10MB)
+
+### Strava Integration Issues
+
+**Error: "Strava OAuth not configured"**
+
+**Solution:**
+- Set `STRAVA_ENABLED=false` if you don't need Strava
+- Or configure Strava credentials:
+  - `STRAVA_CLIENT_ID`
+  - `STRAVA_CLIENT_SECRET`
+  - `STRAVA_REDIRECT_URI`
+
+**Error: "httpx library not installed"**
+
+**Solution:**
 ```bash
-curl http://localhost:8000/api/health
+pip install httpx
 ```
 
-Should return: `{"status":"ok","message":"Swimming Dashboard API is running"}`
+### Chart Display Issues
 
-### Step 5: Common Issues
+**Charts not showing:**
+- Check browser console for JavaScript errors
+- Ensure Chart.js is loaded (check network tab)
+- Verify data is being returned from API
 
-**Issue: Server not running**
-- Solution: Start the server with `cd backend && python main.py`
+### Mobile Display Issues
 
-**Issue: Port 8000 already in use**
-- Solution: Change port in `main.py` or kill the process using port 8000
+**Charts too small or cut off:**
+- Clear browser cache
+- Check that latest version is deployed
+- Verify responsive CSS is loaded
 
-**Issue: CSV file format incorrect**
-- Solution: Make sure it's a valid Coros CSV file with expected columns
+## Development Tips
 
-**Issue: CORS errors**
-- Solution: CORS middleware is already added, but check browser console
+### Running Locally
 
-**Issue: JavaScript errors**
-- Solution: Check browser console for specific error messages
+1. **From fastapi_dashboard directory:**
+   ```bash
+   cd fastapi_dashboard
+   ./start.sh
+   ```
 
-### Step 6: Manual Test
+2. **Or manually:**
+   ```bash
+   cd fastapi_dashboard
+   python3 -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-You can test the API directly with curl:
-```bash
-curl -X POST http://localhost:8000/api/analyze \
-  -F "file=@csv_folder/swimming/455369450500161536.csv"
-```
+3. **From backend directory:**
+   ```bash
+   cd fastapi_dashboard/backend
+   python3 main.py
+   ```
 
-This will show you the raw JSON response and help identify if the issue is frontend or backend.
+### Testing Strava Integration
 
-### Debugging Checklist
+1. Set environment variables:
+   ```bash
+   export STRAVA_ENABLED=true
+   export STRAVA_CLIENT_ID=your_id
+   export STRAVA_CLIENT_SECRET=your_secret
+   export STRAVA_REDIRECT_URI=http://localhost:8000/strava/callback
+   ```
 
-- [ ] Server is running (check terminal)
-- [ ] Browser console shows no errors
-- [ ] Network tab shows request being sent
-- [ ] Server logs show file being received
-- [ ] CSV file is valid format
-- [ ] File size is reasonable (< 50MB)
+2. Start server and test OAuth flow
 
-### Getting Help
+### Debugging
 
-If still not working, provide:
-1. Browser console errors (screenshot or copy text)
-2. Server terminal output (copy text)
-3. Network tab details (status code, response)
-4. CSV file sample (first few rows)
+- Check server logs for errors
+- Use browser developer tools (F12) to see console errors
+- Verify API responses in Network tab
+- Check that environment variables are set correctly

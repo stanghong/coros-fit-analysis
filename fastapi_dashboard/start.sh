@@ -23,5 +23,7 @@ echo "Starting FastAPI server on http://localhost:8000"
 echo "Press Ctrl+C to stop"
 echo ""
 
-cd backend
-python3 main.py
+# Run from fastapi_dashboard directory so uvicorn can find the module
+# This ensures backend.main:app can be imported correctly
+cd "$(dirname "$0")"
+python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
