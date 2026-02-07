@@ -1824,6 +1824,49 @@
             errorDiv.classList.add('show');
             console.error('Error displayed:', message);
         }
+        
+        // Feature flags
+        let stravaEnabled = {{ 'true' if strava_enabled else 'false' }};
+        
+        // Load config from API on page load
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                stravaEnabled = config.strava_enabled || false;
+                updateUIForStrava();
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+        
+        // Update UI based on Strava enabled status
+        function updateUIForStrava() {
+            const stravaTab = document.getElementById('tabStrava');
+            const stravaSection = document.getElementById('stravaSection');
+            
+            if (stravaTab) {
+                stravaTab.style.display = stravaEnabled ? 'block' : 'none';
+            }
+            if (stravaSection) {
+                stravaSection.style.display = stravaEnabled ? 'block' : 'none';
+            }
+        }
+        
+        // Placeholder for Strava connection
+        function connectStrava() {
+            if (!stravaEnabled) {
+                showError('Strava integration is not enabled');
+                return;
+            }
+            // TODO: Implement Strava OAuth flow
+            alert('Strava connection will be implemented here');
+        }
+        
+        // Load config on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+        });
     </script>
 </body>
 </html>
