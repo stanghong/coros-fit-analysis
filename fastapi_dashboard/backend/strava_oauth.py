@@ -308,19 +308,25 @@ async def analyze_strava_activity(activity_id: int):
             
             streams = {}
             if streams_response.status_code == 200:
-                streams_list = streams_response.json()
-                # Strava returns streams as a list of objects
-                # Convert list format to dict format keyed by stream type
-                if isinstance(streams_list, list):
-                    for stream in streams_list:
+                streams_data = streams_response.json()
+                
+                # With key_by_type=true, Strava returns a dict keyed by stream type
+                # Each value is a dict with 'data' and 'series_type' keys
+                if isinstance(streams_data, dict):
+                    # Already in the format we need - use as-is
+                    streams = streams_data
+                elif isinstance(streams_data, list):
+                    # Convert list format to dict format
+                    for stream in streams_data:
                         if isinstance(stream, dict) and 'type' in stream:
                             streams[stream['type']] = {
                                 'data': stream.get('data', []),
                                 'series_type': stream.get('series_type', 'time')
                             }
-                elif isinstance(streams_list, dict):
-                    # If already in dict format (key_by_type=true), use as-is
-                    streams = streams_list
+                else:
+                    # Unexpected format - log and use empty dict
+                    print(f"Warning: Unexpected streams format: {type(streams_data)}")
+                    streams = {}
             
             # Convert Strava data to DataFrame
             df = strava_streams_to_dataframe(activity, streams)
