@@ -1929,19 +1929,107 @@
             }
         }
         
-        // Placeholder for Strava connection
+        // Strava connection - redirect to OAuth
         function connectStrava() {
             if (!stravaEnabled) {
                 showError('Strava integration is not enabled');
                 return;
             }
-            // TODO: Implement Strava OAuth flow
-            alert('Strava connection will be implemented here');
+            window.location.href = '/strava/login';
+        }
+        
+        // Import latest activity from Strava
+        async function importLatestActivity() {
+            if (!stravaEnabled) {
+                showError('Strava integration is not enabled');
+                return;
+            }
+            
+            const importBtn = document.getElementById('stravaImportBtn');
+            const statusDiv = document.getElementById('stravaImportStatus');
+            
+            importBtn.disabled = true;
+            importBtn.textContent = 'Importing...';
+            statusDiv.innerHTML = '<p style="color: #667eea;">Fetching activities from Strava...</p>';
+            
+            try {
+                const response = await fetch('/strava/import-latest');
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to import activities');
+                }
+                
+                const data = await response.json();
+                statusDiv.innerHTML = `
+                    <p style="color: #2ecc71; font-weight: bold;">✓ Successfully imported ${data.count} activities</p>
+                    <p style="font-size: 0.9em; color: #666; margin-top: 10px;">
+                        Activities fetched. Next step: Select an activity to analyze.
+                    </p>
+                `;
+                
+                // TODO: Display activities list and allow selection for analysis
+                console.log('Imported activities:', data.activities);
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<p style="color: #e74c3c;">Error: ${error.message}</p>`;
+                showError(error.message);
+            } finally {
+                importBtn.disabled = false;
+                importBtn.textContent = 'Import Latest Activity';
+            }
+        }
+        
+        // Check Strava connection status
+        async function checkStravaStatus() {
+            if (!stravaEnabled) return;
+            
+            try {
+                const response = await fetch('/strava/status');
+                const status = await response.json();
+                
+                if (status.connected) {
+                    // Show import box, hide connect box
+                    const connectBox = document.getElementById('stravaConnectBox');
+                    const importBox = document.getElementById('stravaImportBox');
+                    if (connectBox) connectBox.style.display = 'none';
+                    if (importBox) importBox.style.display = 'block';
+                    
+                    // Show athlete info
+                    const athleteInfo = document.getElementById('stravaAthleteInfo');
+                    if (athleteInfo && status.athlete) {
+                        athleteInfo.textContent = `Connected as ${status.athlete.firstname || ''} ${status.athlete.lastname || ''}`;
+                    } else if (athleteInfo) {
+                        athleteInfo.textContent = 'Connected to Strava';
+                    }
+                } else {
+                    // Show connect box, hide import box
+                    const connectBox = document.getElementById('stravaConnectBox');
+                    const importBox = document.getElementById('stravaImportBox');
+                    if (connectBox) connectBox.style.display = 'block';
+                    if (importBox) importBox.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to check Strava status:', error);
+            }
         }
         
         // Load config on page load
         window.addEventListener('DOMContentLoaded', function() {
-            loadConfig();
+            loadConfig().then(() => {
+                checkStravaStatus();
+            });
+            
+            // Check if we just connected (from URL parameter)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('strava_connected') === 'true') {
+                setTimeout(() => {
+                    checkStravaStatus();
+                    // Switch to Strava tab if enabled
+                    if (stravaEnabled) {
+                        switchTab('strava');
+                    }
+                }, 500);
+            }
         });
     </script>
 </body>
