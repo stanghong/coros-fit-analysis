@@ -52,11 +52,38 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Templates
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# Feature flags from environment variables
+STRAVA_ENABLED = os.getenv("STRAVA_ENABLED", "false").lower() == "true"
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "strava_enabled": STRAVA_ENABLED
+    })
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get application configuration including feature flags."""
+    return {
+        "strava_enabled": STRAVA_ENABLED
+    }
+
+
+# Import Strava OAuth routes if enabled
+if STRAVA_ENABLED:
+    try:
+        from strava_oauth import router as strava_router
+        app.include_router(strava_router)
+    except ImportError as e:
+        print(f"Warning: Could not import Strava OAuth routes: {e}")
+        print("Strava features will be disabled.")
+    except Exception as e:
+        print(f"Warning: Error setting up Strava OAuth: {e}")
+        print("Strava features will be disabled.")
 
 
 @app.post("/api/analyze")

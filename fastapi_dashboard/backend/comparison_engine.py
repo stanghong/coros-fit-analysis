@@ -60,6 +60,9 @@ def analyze_multiple_workouts(workout_dataframes: List[pd.DataFrame]) -> Dict:
     # Training recommendations
     recommendations = generate_training_recommendations(workouts, trends, strengths_weaknesses)
     
+    # Generate high-level coach summary (one-line strength/weakness + next workout focus)
+    coach_summary = generate_multi_workout_coach_summary(workouts, trends, strengths_weaknesses, time_series)
+    
     return {
         'workouts': workouts,
         'time_series': time_series,
@@ -67,7 +70,8 @@ def analyze_multiple_workouts(workout_dataframes: List[pd.DataFrame]) -> Dict:
         'insights': insights,
         'strengths_weaknesses': strengths_weaknesses,
         'recommendations': recommendations,
-        'summary': generate_summary(workouts, trends)
+        'summary': generate_summary(workouts, trends),
+        'coach_summary': coach_summary
     }
 
 
@@ -427,6 +431,156 @@ def generate_training_recommendations(workouts: List[Dict], trends: Dict, streng
         })
     
     return recommendations
+
+
+def generate_multi_workout_coach_summary(workouts: List[Dict], trends: Dict, strengths_weaknesses: Dict, time_series: Dict) -> Dict:
+    """
+    Generate high-level one-line coach summary for multiple workouts.
+    Uses timestamps/trends to identify what's improving/declining.
+    Provides focused recommendation for next workout.
+    """
+    if len(workouts) < 2:
+        return {
+            'headline': "Keep building consistency across workouts.",
+            'constraint': "Need more data to identify patterns.",
+            'action': "Continue regular training and track progress."
+        }
+    
+    # Analyze trends over time to identify what's improving/declining
+    headline = ""
+    constraint = ""
+    
+    # Identify strongest improving trend
+    improving_areas = []
+    declining_areas = []
+    
+    # Check score trend
+    if 'score' in trends:
+        score_trend = trends['score']
+        if score_trend['trend'] == 'up' and score_trend['change_pct'] > 5:
+            improving_areas.append(('overall performance', score_trend['change_pct']))
+        elif score_trend['trend'] == 'down' and abs(score_trend['change_pct']) > 5:
+            declining_areas.append(('overall performance', abs(score_trend['change_pct'])))
+    
+    # Check sub-score trends
+    sub_score_names = {
+        'distance_endurance': 'endurance',
+        'pace_consistency': 'pacing',
+        'stroke_stability': 'stroke technique',
+        'speed_gears': 'speed variation'
+    }
+    
+    for key, name in sub_score_names.items():
+        trend_key = f'sub_score_{key}'
+        if trend_key in trends:
+            trend = trends[trend_key]
+            if trend['trend'] == 'up' and trend['change_pct'] > 5:
+                improving_areas.append((name, trend['change_pct']))
+            elif trend['trend'] == 'down' and abs(trend['change_pct']) > 5:
+                declining_areas.append((name, abs(trend['change_pct'])))
+    
+    # Generate headline (what's going well)
+    if improving_areas:
+        # Sort by improvement percentage
+        improving_areas.sort(key=lambda x: x[1], reverse=True)
+        best_area, improvement = improving_areas[0]
+        
+        if best_area == 'overall performance':
+            headline = f"Your performance is improving — scores up {improvement:.1f}% over recent workouts."
+        elif best_area == 'endurance':
+            headline = f"Endurance is building — you're sustaining longer distances consistently."
+        elif best_area == 'pacing':
+            headline = f"Pacing is getting more consistent — better control over speed."
+        elif best_area == 'stroke technique':
+            headline = f"Stroke rhythm is stabilizing — technique holding up under fatigue."
+        elif best_area == 'speed variation':
+            headline = f"Speed range is expanding — using multiple gears effectively."
+        else:
+            headline = f"{best_area.capitalize()} is improving — {improvement:.1f}% better over time."
+    else:
+        # Check for consistent high performance
+        recent_scores = time_series['scores'][-3:] if len(time_series['scores']) >= 3 else time_series['scores']
+        if recent_scores and np.mean(recent_scores) >= 70:
+            headline = "Maintaining strong performance — consistent execution across workouts."
+        else:
+            headline = "Building your base — every workout contributes to progress."
+    
+    # Generate constraint (what's limiting performance)
+    if declining_areas:
+        declining_areas.sort(key=lambda x: x[1], reverse=True)
+        worst_area, decline = declining_areas[0]
+        
+        if worst_area == 'overall performance':
+            constraint = f"Performance declining {decline:.1f}% — may indicate fatigue or need for recovery."
+        elif worst_area == 'endurance':
+            constraint = "Distance capacity limited — build volume gradually to improve endurance."
+        elif worst_area == 'pacing':
+            constraint = "Pacing too variable — focus on consistent splits to build efficiency."
+        elif worst_area == 'stroke technique':
+            constraint = "Stroke rate inconsistent — rhythm breaking down under fatigue."
+        elif worst_area == 'speed variation':
+            constraint = "One-gear swimming — limited speed range reduces training stimulus."
+        else:
+            constraint = f"{worst_area.capitalize()} needs work — {decline:.1f}% decline over time."
+    else:
+        # Check for consistently low areas
+        if strengths_weaknesses and 'weaknesses' in strengths_weaknesses:
+            weaknesses = strengths_weaknesses['weaknesses']
+            if weaknesses:
+                weakest = weaknesses[0]
+                constraint = f"{weakest['area']} consistently low — {weakest['avg_score']:.0f}/25 average needs attention."
+            else:
+                constraint = "All areas improving — focus on progressive overload to continue gains."
+        else:
+            constraint = "Some areas need refinement — identify specific limiter to target."
+    
+    # Generate action (what to focus on next workout)
+    # Prioritize: declining areas > consistently weak areas > building on strengths
+    action = ""
+    
+    if declining_areas:
+        worst_area, _ = declining_areas[0]
+        if worst_area == 'endurance':
+            action = "Next session: 3×500 steady pace, 30s rest — build endurance base."
+        elif worst_area == 'pacing':
+            action = "Next session: 8×100 on consistent splits, 20s rest — lock in pacing rhythm."
+        elif worst_area == 'stroke technique':
+            action = "Next session: 4×200 with stroke count focus, 45s rest — stabilize technique."
+        elif worst_area == 'speed variation':
+            action = "Next session: 6×100 alternating easy/hard, 30s rest — develop speed range."
+        else:
+            action = f"Next session: Focus on {worst_area} — address the declining trend."
+    elif strengths_weaknesses and 'weaknesses' in strengths_weaknesses:
+        weaknesses = strengths_weaknesses['weaknesses']
+        if weaknesses:
+            weakest = weaknesses[0]
+            area = weakest['area'].lower()
+            if 'distance' in area or 'endurance' in area:
+                action = "Next session: 3×500 steady pace, 30s rest — build endurance capacity."
+            elif 'pace' in area or 'consistency' in area:
+                action = "Next session: 8×100 on consistent splits, 20s rest — improve pacing control."
+            elif 'stroke' in area or 'technique' in area:
+                action = "Next session: 4×200 with stroke count focus, 45s rest — stabilize stroke rhythm."
+            elif 'speed' in area or 'gear' in area:
+                action = "Next session: 6×100 alternating easy/hard, 30s rest — develop speed variation."
+            else:
+                action = f"Next session: Target {weakest['area']} — address the weakest area."
+        else:
+            # All areas strong, focus on progression
+            if improving_areas:
+                best_area, _ = improving_areas[0]
+                action = f"Next session: Build on {best_area} strength — add 10% volume or intensity."
+            else:
+                action = "Next session: Continue current approach — maintain consistency and progress."
+    else:
+        # Default recommendation
+        action = "Next session: Mix of endurance and technique — balanced training approach."
+    
+    return {
+        'headline': headline,
+        'constraint': constraint,
+        'action': action
+    }
 
 
 def generate_summary(workouts: List[Dict], trends: Dict) -> Dict:
