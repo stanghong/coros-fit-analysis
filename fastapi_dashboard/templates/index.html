@@ -2056,11 +2056,17 @@
                                 
                                 activityDiv.innerHTML = `
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <div>
-                                            <strong style="color: #667eea;">${safeName}</strong>
-                                            <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
-                                                ${distanceKm} km • ${durationMin} min • ${date}
-                                            </p>
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <input type="checkbox" class="strava-activity-checkbox" 
+                                                   data-activity-id="${activity.id}" 
+                                                   onchange="updateStravaActionButtons()"
+                                                   style="width: 20px; height: 20px; cursor: pointer;">
+                                            <div>
+                                                <strong style="color: #667eea;">${safeName}</strong>
+                                                <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
+                                                    ${distanceKm} km • ${durationMin} min • ${date}
+                                                </p>
+                                            </div>
                                         </div>
                                         <button class="upload-btn" style="padding: 8px 20px; font-size: 0.9em;" 
                                                 onclick="analyzeStravaActivity(${activity.id}, '${safeName}')">
