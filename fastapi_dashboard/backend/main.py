@@ -72,8 +72,14 @@ async def root(request: Request):
 @app.get("/api/config")
 async def get_config():
     """Get application configuration including feature flags."""
+    # Debug: Check raw env var value
+    raw_value = os.getenv("STRAVA_ENABLED", "NOT_SET")
     return {
-        "strava_enabled": STRAVA_ENABLED
+        "strava_enabled": STRAVA_ENABLED,
+        "debug": {
+            "STRAVA_ENABLED_raw": raw_value,
+            "STRAVA_ENABLED_parsed": STRAVA_ENABLED
+        }
     }
 
 
