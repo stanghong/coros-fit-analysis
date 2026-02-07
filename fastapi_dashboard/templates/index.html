@@ -691,11 +691,11 @@
                         Choose File
                     </button>
                     <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event)" style="display: none;">
+                    <div id="selectedFileName" style="margin-top: 15px; color: #667eea; font-weight: bold; min-height: 20px;"></div>
                 </div>
-                <button class="upload-btn" id="analyzeBtn" onclick="analyzeSelectedFile()" style="margin-top: 20px; display: none;">
+                <button class="upload-btn" id="analyzeBtn" onclick="analyzeSelectedFile()" style="margin-top: 20px; display: none; width: 100%; max-width: 400px;">
                     📊 Begin Analysis
                 </button>
-                <div id="selectedFileName" style="margin-top: 15px; color: #667eea; font-weight: bold;"></div>
             </div>
         </div>
         
@@ -1354,11 +1354,19 @@
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (file) {
+                if (!file.name.endsWith('.csv')) {
+                    showError('Please select a CSV file');
+                    return;
+                }
                 selectedFile = file;
                 // Show the selected file name
-                document.getElementById('selectedFileName').textContent = 'Selected: ' + file.name;
+                document.getElementById('selectedFileName').textContent = '✓ Selected: ' + file.name;
                 // Show the analyze button
                 document.getElementById('analyzeBtn').style.display = 'block';
+                // Auto-start analysis after file selection
+                setTimeout(() => {
+                    analyzeSelectedFile();
+                }, 300);
             } else {
                 showError('No file selected');
             }
