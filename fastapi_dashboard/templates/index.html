@@ -1316,8 +1316,17 @@
             const files = e.dataTransfer.files;
             if (files.length > 0 && files[0].name.endsWith('.csv')) {
                 selectedFile = files[0];
-                document.getElementById('selectedFileName').textContent = 'Selected: ' + files[0].name;
-                document.getElementById('analyzeBtn').style.display = 'block';
+                document.getElementById('selectedFileName').textContent = '✓ Selected: ' + files[0].name;
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                analyzeBtn.style.opacity = '1';
+                analyzeBtn.style.cursor = 'pointer';
+                analyzeBtn.disabled = false;
+                // Auto-start analysis after file drop
+                setTimeout(() => {
+                    analyzeSelectedFile();
+                }, 300);
+            } else {
+                showError('Please drop a CSV file');
             }
         });
         
