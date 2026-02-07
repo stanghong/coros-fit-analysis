@@ -1482,7 +1482,7 @@
                                 title: {
                                     display: true,
                                     text: 'Value',
-                                    font: { weight: 'bold', size: 13 },
+                                    font: { weight: 'bold', size: window.innerWidth < 768 ? 11 : 13 },
                                     color: '#333'
                                 },
                                 grid: {
@@ -1490,7 +1490,7 @@
                                     lineWidth: 1
                                 },
                                 ticks: {
-                                    font: { size: 11 },
+                                    font: { size: window.innerWidth < 768 ? 9 : 11 },
                                     color: '#666'
                                 }
                             },
@@ -1498,15 +1498,15 @@
                                 title: {
                                     display: true,
                                     text: 'Time Sample',
-                                    font: { weight: 'bold', size: 13 },
+                                    font: { weight: 'bold', size: window.innerWidth < 768 ? 11 : 13 },
                                     color: '#333'
                                 },
                                 grid: {
                                     display: false
                                 },
                                 ticks: {
-                                    maxTicksLimit: 15,
-                                    font: { size: 10 },
+                                    maxTicksLimit: window.innerWidth < 768 ? 8 : 15,
+                                    font: { size: window.innerWidth < 768 ? 8 : 10 },
                                     color: '#666'
                                 }
                             }
@@ -1516,18 +1516,18 @@
                                 position: 'top',
                                 labels: {
                                     color: '#333',
-                                    font: { size: 13, weight: 'bold' },
+                                    font: { size: window.innerWidth < 768 ? 11 : 13, weight: 'bold' },
                                     usePointStyle: true,
-                                    padding: 15,
-                                    boxWidth: 12,
-                                    boxHeight: 12
+                                    padding: window.innerWidth < 768 ? 10 : 15,
+                                    boxWidth: window.innerWidth < 768 ? 10 : 12,
+                                    boxHeight: window.innerWidth < 768 ? 10 : 12
                                 }
                             },
                             tooltip: {
                                 backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                padding: 12,
-                                titleFont: { size: 13, weight: 'bold' },
-                                bodyFont: { size: 12 },
+                                padding: window.innerWidth < 768 ? 8 : 12,
+                                titleFont: { size: window.innerWidth < 768 ? 11 : 13, weight: 'bold' },
+                                bodyFont: { size: window.innerWidth < 768 ? 10 : 12 },
                                 borderColor: '#667eea',
                                 borderWidth: 1,
                                 cornerRadius: 8,
@@ -1611,37 +1611,37 @@
                                 x: {
                                     type: 'linear',
                                     position: 'bottom',
-                                    title: {
-                                        display: true,
-                                        text: 'Speed (m/s)',
-                                        font: { weight: 'bold', size: 13 },
-                                        color: '#333'
-                                    },
-                                    grid: {
-                                        color: 'rgba(0, 0, 0, 0.08)',
-                                        lineWidth: 1
-                                    },
-                                    ticks: {
-                                        font: { size: 11 },
-                                        color: '#666'
-                                    }
+                                title: {
+                                    display: true,
+                                    text: 'Speed (m/s)',
+                                    font: { weight: 'bold', size: window.innerWidth < 768 ? 11 : 13 },
+                                    color: '#333'
                                 },
-                                y: {
-                                    type: 'linear',
-                                    title: {
-                                        display: true,
-                                        text: 'Efficiency (m/s per spm)',
-                                        font: { weight: 'bold', size: 13 },
-                                        color: '#333'
-                                    },
-                                    grid: {
-                                        color: 'rgba(0, 0, 0, 0.08)',
-                                        lineWidth: 1
-                                    },
-                                    ticks: {
-                                        font: { size: 11 },
-                                        color: '#666'
-                                    }
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.08)',
+                                    lineWidth: 1
+                                },
+                                ticks: {
+                                    font: { size: window.innerWidth < 768 ? 9 : 11 },
+                                    color: '#666'
+                                }
+                            },
+                            y: {
+                                type: 'linear',
+                                title: {
+                                    display: true,
+                                    text: 'Efficiency (m/s per spm)',
+                                    font: { weight: 'bold', size: window.innerWidth < 768 ? 11 : 13 },
+                                    color: '#333'
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.08)',
+                                    lineWidth: 1
+                                },
+                                ticks: {
+                                    font: { size: window.innerWidth < 768 ? 9 : 11 },
+                                    color: '#666'
+                                }
                                 }
                             },
                             plugins: {
