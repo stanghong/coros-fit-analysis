@@ -1361,8 +1361,11 @@
                 selectedFile = file;
                 // Show the selected file name
                 document.getElementById('selectedFileName').textContent = '✓ Selected: ' + file.name;
-                // Show the analyze button
-                document.getElementById('analyzeBtn').style.display = 'block';
+                // Enable the analyze button
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                analyzeBtn.style.opacity = '1';
+                analyzeBtn.style.cursor = 'pointer';
+                analyzeBtn.disabled = false;
                 // Auto-start analysis after file selection
                 setTimeout(() => {
                     analyzeSelectedFile();
