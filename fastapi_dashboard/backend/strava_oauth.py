@@ -119,6 +119,9 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
             # Redirect back to dashboard with success message
             return RedirectResponse(url="/?strava_connected=true")
     
+    except HTTPException:
+        # Re-raise HTTPException as-is (don't wrap it)
+        raise
     except httpx.HTTPStatusError as e:
         error_detail = e.response.text
         try:
