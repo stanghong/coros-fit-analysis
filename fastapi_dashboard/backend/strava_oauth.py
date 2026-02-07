@@ -270,6 +270,13 @@ async def analyze_strava_activity(activity_id: int):
         )
     
     try:
+        import sys
+        from pathlib import Path
+        # Add backend directory to path for imports
+        backend_dir = Path(__file__).parent
+        if str(backend_dir) not in sys.path:
+            sys.path.insert(0, str(backend_dir))
+        
         from strava_converter import strava_streams_to_dataframe, is_swimming_activity
         from analysis_engine import analyze_workout
         
