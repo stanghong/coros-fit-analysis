@@ -87,9 +87,23 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
                     "client_secret": STRAVA_CLIENT_SECRET,
                     "code": code,
                     "grant_type": "authorization_code"
-                }
+                },
+                timeout=10.0
             )
-            token_response.raise_for_status()
+            
+            # Check for errors in response
+            if token_response.status_code != 200:
+                error_detail = token_response.text
+                try:
+                    error_json = token_response.json()
+                    error_detail = str(error_json)
+                except:
+                    pass
+                raise HTTPException(
+                    status_code=token_response.status_code,
+                    detail=f"Strava token exchange failed: {error_detail}"
+                )
+            
             token_data = token_response.json()
             
             # Store tokens (in production, use database with user session)
