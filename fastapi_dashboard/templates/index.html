@@ -1385,16 +1385,30 @@
         }
 
         function analyzeSelectedFile() {
-            if (selectedFile) {
-                handleFile(selectedFile);
-            } else {
+            if (!selectedFile) {
                 showError('Please select a file first');
+                return;
             }
+            
+            // Disable button during analysis
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            if (analyzeBtn) {
+                analyzeBtn.disabled = true;
+                analyzeBtn.textContent = '⏳ Analyzing...';
+            }
+            
+            handleFile(selectedFile);
         }
 
         async function handleFile(file) {
             if (!file) {
                 showError('No file selected');
+                // Re-enable button if no file
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                if (analyzeBtn && selectedFile) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = '📊 Begin Analysis';
+                }
                 return;
             }
 
@@ -1434,6 +1448,12 @@
             } catch (error) {
                 console.error('Error analyzing file:', error);
                 showError(error.message || 'Failed to analyze file. Please check the console for details.');
+                // Re-enable button on error
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                if (analyzeBtn && selectedFile) {
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = '📊 Begin Analysis';
+                }
             } finally {
                 document.getElementById('loading').classList.remove('show');
             }
