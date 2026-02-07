@@ -309,12 +309,18 @@ async def analyze_strava_activity(activity_id: int):
             streams = {}
             if streams_response.status_code == 200:
                 streams_list = streams_response.json()
-                # Convert list format to dict format
-                for stream in streams_list:
-                    streams[stream['type']] = {
-                        'data': stream.get('data', []),
-                        'series_type': stream.get('series_type', 'time')
-                    }
+                # Strava returns streams as a list of objects
+                # Convert list format to dict format keyed by stream type
+                if isinstance(streams_list, list):
+                    for stream in streams_list:
+                        if isinstance(stream, dict) and 'type' in stream:
+                            streams[stream['type']] = {
+                                'data': stream.get('data', []),
+                                'series_type': stream.get('series_type', 'time')
+                            }
+                elif isinstance(streams_list, dict):
+                    # If already in dict format (key_by_type=true), use as-is
+                    streams = streams_list
             
             # Convert Strava data to DataFrame
             df = strava_streams_to_dataframe(activity, streams)
