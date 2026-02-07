@@ -53,7 +53,11 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Feature flags from environment variables
-STRAVA_ENABLED = os.getenv("STRAVA_ENABLED", "false").lower() == "true"
+# Handle various formats: "true", "True", "TRUE", "1", etc.
+_strava_enabled_raw = os.getenv("STRAVA_ENABLED", "false").strip().lower()
+STRAVA_ENABLED = _strava_enabled_raw in ("true", "1", "yes", "on")
+print(f"DEBUG: STRAVA_ENABLED env var = '{os.getenv('STRAVA_ENABLED', 'NOT SET')}'")
+print(f"DEBUG: STRAVA_ENABLED parsed = {STRAVA_ENABLED}")
 
 
 @app.get("/", response_class=HTMLResponse)
