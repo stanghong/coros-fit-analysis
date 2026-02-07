@@ -59,10 +59,17 @@ Use these settings:
 2. You should see the Swimming Workout Dashboard
 3. Test by uploading a CSV file
 
-## Environment Variables (Optional)
+## Environment Variables
 
-If you need any environment variables later, you can add them in:
-- Render Dashboard → Your Service → Environment
+### Feature Flags
+
+**STRAVA_ENABLED** (Optional, default: `false`)
+- Set to `true` to enable Strava integration features
+- Set to `false` to disable Strava (MVP works without it)
+- This allows you to deploy the working MVP without Strava configured
+
+To add environment variables in Render:
+- Render Dashboard → Your Service → Environment → Add Environment Variable
 
 ## Troubleshooting
 

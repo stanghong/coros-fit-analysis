@@ -52,11 +52,25 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Templates
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# Feature flags from environment variables
+STRAVA_ENABLED = os.getenv("STRAVA_ENABLED", "false").lower() == "true"
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "strava_enabled": STRAVA_ENABLED
+    })
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get application configuration including feature flags."""
+    return {
+        "strava_enabled": STRAVA_ENABLED
+    }
 
 
 @app.post("/api/analyze")

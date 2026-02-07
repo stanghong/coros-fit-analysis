@@ -677,6 +677,9 @@
         <div style="display: flex; gap: 10px; padding: 20px; background: #f8f9ff; border-bottom: 2px solid #e0e0e0;">
             <button class="tab-btn active" onclick="switchTab('single')" id="tabSingle">Single Workout</button>
             <button class="tab-btn" onclick="switchTab('compare')" id="tabCompare">Compare Workouts</button>
+            {% if strava_enabled %}
+            <button class="tab-btn" onclick="switchTab('strava')" id="tabStrava">Connect Strava</button>
+            {% endif %}
         </div>
         
         <!-- Single Workout Section -->
@@ -710,6 +713,21 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Strava Section (only shown if enabled) -->
+        {% if strava_enabled %}
+        <div id="stravaSection" class="tab-section" style="display: none;">
+            <div class="upload-section">
+                <div class="upload-box">
+                    <p style="font-size: 1.2em; margin-bottom: 20px;">🔗 Connect Your Strava Account</p>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">Sync your workouts from Strava for automatic analysis</p>
+                    <button class="upload-btn" id="stravaConnectBtn" onclick="connectStrava()">
+                        Connect Strava
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
