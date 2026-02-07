@@ -1360,30 +1360,6 @@
             }
         });
         
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (file) {
-                if (!file.name.endsWith('.csv')) {
-                    showError('Please select a CSV file');
-                    return;
-                }
-                selectedFile = file;
-                // Show the selected file name
-                document.getElementById('selectedFileName').textContent = '✓ Selected: ' + file.name;
-                // Enable the analyze button
-                const analyzeBtn = document.getElementById('analyzeBtn');
-                analyzeBtn.style.opacity = '1';
-                analyzeBtn.style.cursor = 'pointer';
-                analyzeBtn.disabled = false;
-                // Auto-start analysis after file selection
-                setTimeout(() => {
-                    analyzeSelectedFile();
-                }, 300);
-            } else {
-                showError('No file selected');
-            }
-        }
-
         function analyzeSelectedFile() {
             if (!selectedFile) {
                 showError('Please select a file first');
@@ -1937,10 +1913,7 @@
             console.error('Error displayed:', message);
         }
         
-        // Feature flags
-        let stravaEnabled = {{ 'true' if strava_enabled else 'false' }};
-        
-        // Load config from API on page load
+        // Load config from API on page load (stravaEnabled already declared above)
         async function loadConfig() {
             try {
                 const response = await fetch('/api/config');
