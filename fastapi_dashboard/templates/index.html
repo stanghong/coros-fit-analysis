@@ -1155,6 +1155,30 @@
         }
         
         function displayComparisonResults(data) {
+            // Coach Summary (high-level one-liner)
+            const coachSummary = data.coach_summary || {};
+            const coachSummaryDiv = document.getElementById('comparisonCoachSummary');
+            if (coachSummaryDiv && coachSummary.headline) {
+                coachSummaryDiv.innerHTML = `
+                    <div class="coach-summary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 25px; border-radius: 15px; margin-bottom: 30px; color: white;">
+                        <h2 style="color: white; margin-bottom: 20px; font-size: 1.5em;">🎯 Multi-Workout Coach Summary</h2>
+                        <div class="coach-summary-item" style="margin-bottom: 15px;">
+                            <strong style="font-size: 1.1em;">What's Going Well:</strong>
+                            <p style="margin-top: 8px; font-size: 1.05em;">${coachSummary.headline || 'Building consistency across workouts.'}</p>
+                        </div>
+                        <div class="coach-summary-item" style="margin-bottom: 15px;">
+                            <strong style="font-size: 1.1em;">What's Limiting Progress:</strong>
+                            <p style="margin-top: 8px; font-size: 1.05em;">${coachSummary.constraint || 'Some areas need refinement.'}</p>
+                        </div>
+                        <div class="coach-summary-item" style="margin-bottom: 0;">
+                            <strong style="font-size: 1.1em;">Next Workout Focus:</strong>
+                            <p style="margin-top: 8px; font-size: 1.05em; font-weight: bold;">${coachSummary.action || 'Continue consistent training.'}</p>
+                        </div>
+                    </div>
+                `;
+                coachSummaryDiv.style.display = 'block';
+            }
+            
             // Summary
             const summary = data.summary || {};
             const summaryDiv = document.getElementById('comparisonSummary');

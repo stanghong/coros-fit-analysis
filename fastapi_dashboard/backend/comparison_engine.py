@@ -60,6 +60,9 @@ def analyze_multiple_workouts(workout_dataframes: List[pd.DataFrame]) -> Dict:
     # Training recommendations
     recommendations = generate_training_recommendations(workouts, trends, strengths_weaknesses)
     
+    # Generate high-level coach summary (one-line strength/weakness + next workout focus)
+    coach_summary = generate_multi_workout_coach_summary(workouts, trends, strengths_weaknesses, time_series)
+    
     return {
         'workouts': workouts,
         'time_series': time_series,
@@ -67,7 +70,8 @@ def analyze_multiple_workouts(workout_dataframes: List[pd.DataFrame]) -> Dict:
         'insights': insights,
         'strengths_weaknesses': strengths_weaknesses,
         'recommendations': recommendations,
-        'summary': generate_summary(workouts, trends)
+        'summary': generate_summary(workouts, trends),
+        'coach_summary': coach_summary
     }
 
 
