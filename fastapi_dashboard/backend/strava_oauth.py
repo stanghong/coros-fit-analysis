@@ -120,14 +120,22 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
             return RedirectResponse(url="/?strava_connected=true")
     
     except httpx.HTTPStatusError as e:
+        error_detail = e.response.text
+        try:
+            error_json = e.response.json()
+            error_detail = str(error_json)
+        except:
+            pass
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to exchange code for token: {e.response.text}"
+            detail=f"Failed to exchange code for token: {error_detail}"
         )
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Error during Strava OAuth: {str(e)}"
+            detail=f"Error during Strava OAuth: {str(e)}\n\nTraceback:\n{error_trace}"
         )
 
 
