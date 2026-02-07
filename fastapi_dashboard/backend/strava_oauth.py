@@ -241,6 +241,131 @@ async def strava_status():
     }
 
 
+@router.post("/analyze-activities")
+async def analyze_multiple_strava_activities(activity_ids: List[int]):
+    """
+    Analyze multiple Strava activities and compare them.
+    
+    Args:
+        activity_ids: List of Strava activity IDs to analyze
+    """
+    user_id = "default_user"  # TODO: Get from session
+    
+    if user_id not in strava_tokens:
+        raise HTTPException(
+            status_code=401,
+            detail="Not connected to Strava. Please connect your Strava account first."
+        )
+    
+    tokens = strava_tokens[user_id]
+    access_token = tokens.get("access_token")
+    
+    if not access_token:
+        raise HTTPException(
+            status_code=401,
+            detail="No access token found. Please reconnect your Strava account."
+        )
+    
+    if httpx is None:
+        raise HTTPException(
+            status_code=500,
+            detail="httpx library not installed. Please install dependencies: pip install httpx"
+        )
+    
+    if not activity_ids or len(activity_ids) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Please select at least 2 activities to compare"
+        )
+    
+    if len(activity_ids) > 20:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 20 activities allowed for comparison"
+        )
+    
+    try:
+        import sys
+        from pathlib import Path
+        backend_dir = Path(__file__).parent
+        if str(backend_dir) not in sys.path:
+            sys.path.insert(0, str(backend_dir))
+        
+        from strava_converter import strava_streams_to_dataframe, is_swimming_activity
+        from comparison_engine import analyze_multiple_workouts
+        
+        all_dataframes = []
+        
+        async with httpx.AsyncClient() as client:
+            for activity_id in activity_ids:
+                # Fetch activity details
+                activity_response = await client.get(
+                    f"https://www.strava.com/api/v3/activities/{activity_id}",
+                    headers={"Authorization": f"Bearer {access_token}"}
+                )
+                activity_response.raise_for_status()
+                activity = activity_response.json()
+                
+                # Check if it's a swimming activity
+                if not is_swimming_activity(activity):
+                    continue  # Skip non-swimming activities
+                
+                # Fetch activity streams
+                streams_response = await client.get(
+                    f"https://www.strava.com/api/v3/activities/{activity_id}/streams",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={
+                        "keys": "time,distance,velocity_smooth,cadence,heartrate",
+                        "key_by_type": "true"
+                    }
+                )
+                
+                streams = {}
+                if streams_response.status_code == 200:
+                    streams_data = streams_response.json()
+                    if isinstance(streams_data, dict):
+                        streams = streams_data
+                    elif isinstance(streams_data, list):
+                        for stream in streams_data:
+                            if isinstance(stream, dict) and 'type' in stream:
+                                streams[stream['type']] = {
+                                    'data': stream.get('data', []),
+                                    'series_type': stream.get('series_type', 'time')
+                                }
+                
+                # Convert to DataFrame
+                df = strava_streams_to_dataframe(activity, streams)
+                if not df.empty and len(df) > 0:
+                    all_dataframes.append(df)
+        
+        if len(all_dataframes) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Not enough valid swimming activities found. Need at least 2, found {len(all_dataframes)}"
+            )
+        
+        # Analyze using comparison engine
+        comparison_result = analyze_multiple_workouts(all_dataframes)
+        
+        return comparison_result
+    
+    except HTTPException:
+        raise
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="One or more activities not found")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch Strava activities: {e.response.text}"
+        )
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error analyzing Strava activities: {str(e)}\n\n{traceback.format_exc()}"
+        )
+
+
 @router.post("/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: int):
     """

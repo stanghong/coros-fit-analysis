@@ -734,8 +734,21 @@
                     </button>
                     <div id="stravaImportStatus" style="margin-top: 15px;"></div>
                     <div id="stravaActivitiesList" style="margin-top: 20px; display: none;">
-                        <h3 style="color: #667eea; margin-bottom: 15px;">Select Activity to Analyze:</h3>
+                        <h3 style="color: #667eea; margin-bottom: 15px;">Select Activities to Analyze:</h3>
+                        <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                            Select 1 activity for single analysis, or 2-20 activities to compare
+                        </p>
                         <div id="stravaActivitiesContainer" style="max-height: 400px; overflow-y: auto;"></div>
+                        <div style="margin-top: 15px;">
+                            <button class="upload-btn" id="stravaAnalyzeSelectedBtn" onclick="analyzeSelectedStravaActivities()" 
+                                    style="display: none; width: 100%; max-width: 400px;">
+                                Analyze Selected
+                            </button>
+                            <button class="upload-btn" id="stravaCompareSelectedBtn" onclick="compareSelectedStravaActivities()" 
+                                    style="display: none; width: 100%; max-width: 400px; margin-top: 10px; background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);">
+                                Compare Selected
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2074,7 +2087,36 @@
             }
         }
         
-        // Analyze a Strava activity
+        // Update action buttons based on selected activities
+        function updateStravaActionButtons() {
+            const checkboxes = document.querySelectorAll('.strava-activity-checkbox:checked');
+            const selectedCount = checkboxes.length;
+            const analyzeBtn = document.getElementById('stravaAnalyzeSelectedBtn');
+            const compareBtn = document.getElementById('stravaCompareSelectedBtn');
+            
+            if (selectedCount === 0) {
+                if (analyzeBtn) analyzeBtn.style.display = 'none';
+                if (compareBtn) compareBtn.style.display = 'none';
+            } else if (selectedCount === 1) {
+                if (analyzeBtn) analyzeBtn.style.display = 'block';
+                if (compareBtn) compareBtn.style.display = 'none';
+            } else if (selectedCount >= 2 && selectedCount <= 20) {
+                if (analyzeBtn) analyzeBtn.style.display = 'none';
+                if (compareBtn) {
+                    compareBtn.style.display = 'block';
+                    compareBtn.textContent = `Compare ${selectedCount} Activities`;
+                }
+            } else {
+                if (analyzeBtn) analyzeBtn.style.display = 'none';
+                if (compareBtn) {
+                    compareBtn.style.display = 'block';
+                    compareBtn.textContent = 'Too many selected (max 20)';
+                    compareBtn.disabled = true;
+                }
+            }
+        }
+        
+        // Analyze a single Strava activity
         async function analyzeStravaActivity(activityId, activityName) {
             if (!stravaEnabled) {
                 showError('Strava integration is not enabled');
@@ -2114,6 +2156,81 @@
             } catch (error) {
                 console.error('Error analyzing Strava activity:', error);
                 showError(error.message || 'Failed to analyze Strava activity. Please check the console for details.');
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+            }
+        }
+        
+        // Analyze selected activities (single analysis for first selected)
+        async function analyzeSelectedStravaActivities() {
+            const checkboxes = document.querySelectorAll('.strava-activity-checkbox:checked');
+            if (checkboxes.length === 0) {
+                showError('Please select at least one activity');
+                return;
+            }
+            
+            const activityId = parseInt(checkboxes[0].dataset.activityId);
+            const activityName = checkboxes[0].closest('div').querySelector('strong').textContent;
+            await analyzeStravaActivity(activityId, activityName);
+        }
+        
+        // Compare multiple selected Strava activities
+        async function compareSelectedStravaActivities() {
+            if (!stravaEnabled) {
+                showError('Strava integration is not enabled');
+                return;
+            }
+            
+            const checkboxes = document.querySelectorAll('.strava-activity-checkbox:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.activityId));
+            
+            if (selectedIds.length < 2) {
+                showError('Please select at least 2 activities to compare');
+                return;
+            }
+            
+            if (selectedIds.length > 20) {
+                showError('Maximum 20 activities allowed for comparison');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('comparisonResults').classList.remove('show');
+            document.getElementById('error').classList.remove('show');
+            
+            try {
+                const response = await fetch('/strava/analyze-activities', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(selectedIds)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to analyze activities');
+                }
+                
+                const data = await response.json();
+                
+                if (!data || Object.keys(data).length === 0) {
+                    throw new Error('No data returned from server');
+                }
+                
+                console.log('Comparison data received:', data);
+                
+                // Display comparison results using existing function
+                displayComparisonResults(data);
+                
+                // Switch to compare tab to show results
+                switchTab('compare');
+                document.getElementById('comparisonResults').classList.add('show');
+                
+            } catch (error) {
+                console.error('Error comparing Strava activities:', error);
+                showError(error.message || 'Failed to compare Strava activities. Please check the console for details.');
             } finally {
                 document.getElementById('loading').classList.remove('show');
             }
