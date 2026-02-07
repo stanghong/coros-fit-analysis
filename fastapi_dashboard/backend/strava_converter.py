@@ -22,11 +22,20 @@ def strava_streams_to_dataframe(activity: Dict, streams: Dict) -> pd.DataFrame:
     # Extract time-series data from streams
     # streams is a dict where keys are stream types (e.g., 'time', 'distance')
     # and values are dicts with 'data' and 'series_type' keys
-    time_data = streams.get('time', {}).get('data', []) if isinstance(streams.get('time'), dict) else []
-    distance_data = streams.get('distance', {}).get('data', []) if isinstance(streams.get('distance'), dict) else []
-    velocity_smooth = streams.get('velocity_smooth', {}).get('data', []) if isinstance(streams.get('velocity_smooth'), dict) else []
-    cadence_data = streams.get('cadence', {}).get('data', []) if isinstance(streams.get('cadence'), dict) else []
-    heartrate_data = streams.get('heartrate', {}).get('data', []) if isinstance(streams.get('heartrate'), dict) else []
+    def get_stream_data(stream_type: str) -> list:
+        stream_obj = streams.get(stream_type)
+        if isinstance(stream_obj, dict):
+            return stream_obj.get('data', [])
+        elif isinstance(stream_obj, list):
+            # Sometimes Strava returns data directly as a list
+            return stream_obj
+        return []
+    
+    time_data = get_stream_data('time')
+    distance_data = get_stream_data('distance')  # meters
+    velocity_smooth = get_stream_data('velocity_smooth')  # m/s
+    cadence_data = get_stream_data('cadence')  # steps/min (for running) or strokes/min (for swimming)
+    heartrate_data = get_stream_data('heartrate')
     
     # Create DataFrame with time-series data
     data = {
