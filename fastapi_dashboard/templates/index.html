@@ -976,6 +976,44 @@
         // Feature flags
         let stravaEnabled = {{ 'true' if strava_enabled else 'false' }};
         
+        // Error handler - defined early for inline handlers
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            if (errorDiv) {
+                errorDiv.textContent = `Error: ${message}`;
+                errorDiv.classList.add('show');
+            }
+            console.error('Error displayed:', message);
+        }
+        
+        // File selection handler - defined early for inline onchange
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (!file.name.endsWith('.csv')) {
+                    showError('Please select a CSV file');
+                    return;
+                }
+                selectedFile = file;
+                // Show the selected file name
+                document.getElementById('selectedFileName').textContent = '✓ Selected: ' + file.name;
+                // Enable the analyze button
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                if (analyzeBtn) {
+                    analyzeBtn.style.opacity = '1';
+                    analyzeBtn.style.cursor = 'pointer';
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = '📊 Begin Analysis';
+                }
+                // Auto-start analysis after file selection
+                setTimeout(() => {
+                    analyzeSelectedFile();
+                }, 300);
+            } else {
+                showError('No file selected');
+            }
+        }
+        
         // Load config from API on page load
         async function loadConfig() {
             try {
@@ -1906,12 +1944,7 @@
             return `${minutes}:${seconds.toString().padStart(2, '0')}/100m`;
         }
         
-        function showError(message) {
-            const errorDiv = document.getElementById('error');
-            errorDiv.textContent = `Error: ${message}`;
-            errorDiv.classList.add('show');
-            console.error('Error displayed:', message);
-        }
+        // showError is already defined at the top of the script
         
         // Load config from API on page load (stravaEnabled already declared above)
         async function loadConfig() {
