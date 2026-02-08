@@ -59,6 +59,16 @@ pip install -r requirements.txt
    curl http://localhost:8000/api/db-test
    ```
 
+5. **Database Migrations** (if needed):
+   
+   If you see errors like `column users.updated_at does not exist`, run the migration:
+   
+   - **Quick fix**: See `MIGRATION_GUIDE.md` for step-by-step instructions
+   - **Migration files**: Located in `migrations/` directory
+   - **Run once**: Copy SQL from `migrations/001_add_users_updated_at.sql` and run in Supabase SQL Editor
+   
+   See `migrations/README.md` for detailed migration instructions.
+
 ## Running the Application
 
 1. Start the FastAPI server:

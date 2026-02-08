@@ -1,65 +1,43 @@
 # Database Migration Guide
 
 ## Problem
-The error `column users.strava_username does not exist` occurs because the database tables were created before we added new columns to the User model.
+The error `column users.updated_at does not exist` occurs because the database tables were created before we added the `updated_at` column to the User model.
 
-## Solution: Add Missing Columns
+## Quick Fix: Run This Migration Once
 
-### Option 1: Automatic Migration (Recommended)
-
-The migration will run automatically when `DB_AUTO_CREATE=true` is set and the app starts.
-
-1. **On Render:**
-   - Make sure `DB_AUTO_CREATE=true` is set in environment variables
-   - Redeploy your service (or it will auto-deploy after the code push)
-   - Check logs - you should see: `✅ Migration completed successfully!`
-
-### Option 2: Manual SQL Migration
-
-If you prefer to run the migration manually:
+### Recommended: Supabase SQL Editor
 
 1. **Go to Supabase Dashboard:**
    - Visit: https://supabase.com/dashboard
    - Select your project
-   - Go to "SQL Editor"
+   - Click "SQL Editor" in the left sidebar
 
-2. **Run this SQL:**
-   ```sql
-   -- Add new columns to users table
-   ALTER TABLE users 
-   ADD COLUMN IF NOT EXISTS strava_username VARCHAR,
-   ADD COLUMN IF NOT EXISTS strava_firstname VARCHAR,
-   ADD COLUMN IF NOT EXISTS strava_lastname VARCHAR,
-   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+2. **Copy and paste the migration SQL:**
+   - Open `migrations/001_add_users_updated_at.sql`
+   - Copy the entire contents
+   - Paste into Supabase SQL Editor
+   - Click "Run"
 
-   -- Create trigger function for updated_at
-   CREATE OR REPLACE FUNCTION update_updated_at_column()
-   RETURNS TRIGGER AS $$
-   BEGIN
-       NEW.updated_at = CURRENT_TIMESTAMP;
-       RETURN NEW;
-   END;
-   $$ language 'plpgsql';
+3. **Verify it worked:**
+   - You should see "Success" message
+   - The error should be gone after restarting your app
 
-   -- Create trigger
-   DROP TRIGGER IF EXISTS update_users_updated_at ON users;
-   CREATE TRIGGER update_users_updated_at
-       BEFORE UPDATE ON users
-       FOR EACH ROW
-       EXECUTE FUNCTION update_updated_at_column();
-   ```
-
-3. **Click "Run"**
-
-### Option 3: Run Python Migration Script Locally
-
-If you have local database access:
+### Alternative: psql Command Line
 
 ```bash
-cd fastapi_dashboard
-export DATABASE_URL="your_database_url_here"
-python -m backend.migrate_add_athlete_info
+# Set your database URL
+export DATABASE_URL="postgresql://user:pass@host:port/dbname?sslmode=require"
+
+# Run the migration
+psql "$DATABASE_URL" -f fastapi_dashboard/migrations/001_add_users_updated_at.sql
 ```
+
+## Migration Files
+
+All migration scripts are in the `migrations/` directory:
+- `001_add_users_updated_at.sql` - Adds `updated_at` column to `users` table
+
+See `migrations/README.md` for more details.
 
 ## Verify Migration
 
