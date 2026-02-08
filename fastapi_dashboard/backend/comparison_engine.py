@@ -528,7 +528,8 @@ def generate_multi_workout_coach_summary(workouts: List[Dict], trends: Dict, str
             weaknesses = strengths_weaknesses['weaknesses']
             if weaknesses:
                 weakest = weaknesses[0]
-                constraint = f"{weakest['area']} consistently low — {weakest['avg_score']:.0f}/25 average needs attention."
+                score = weakest.get('score', 0)
+                constraint = f"{weakest['area']} consistently low — {score:.0f}/25 average needs attention."
             else:
                 constraint = "All areas improving — focus on progressive overload to continue gains."
         else:
