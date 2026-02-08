@@ -8,6 +8,10 @@ This directory contains SQL migration scripts for the database schema.
 **Problem:** `column users.updated_at does not exist`  
 **Solution:** Adds `updated_at` timestamp column to `users` table with auto-update trigger.
 
+### 002_add_sport_type_column.sql
+**Problem:** Activities table only has `type` column, not `sport_type` from Strava API  
+**Solution:** Adds `sport_type` column to `activities` table for multi-sport support. Stores Strava's `sport_type` (preferred) separately from `type` (fallback). Includes index for faster filtering and backfills existing records.
+
 ## How to Run Migrations
 
 ### Method 1: Supabase SQL Editor (Recommended)

@@ -267,7 +267,8 @@ def upsert_activity(db: Session, user_id: int, activity_data: Dict) -> Activity:
         user_id: User ID (from User model)
         activity_data: Dictionary containing Strava activity data:
             - id: int (Strava activity ID, required)
-            - type: str (sport_type)
+            - sport_type: str (preferred: "Swim", "Run", "Ride", "OpenWaterSwim", etc.)
+            - type: str (fallback: "Swim", "Run", "Bike", etc.)
             - start_date: str (ISO format datetime)
             - distance: float (meters)
             - moving_time: int (seconds)
@@ -301,9 +302,14 @@ def upsert_activity(db: Session, user_id: int, activity_data: Dict) -> Activity:
     # Try to find existing activity
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
     
+    # Extract sport_type and type separately
+    sport_type = activity_data.get("sport_type")
+    activity_type = activity_data.get("type")
+    
     if activity:
         # Update existing activity
-        activity.type = activity_data.get("sport_type") or activity_data.get("type")
+        activity.sport_type = sport_type if sport_type else activity.sport_type
+        activity.type = activity_type if activity_type else activity.type
         activity.start_date = start_date or activity.start_date
         activity.distance_m = activity_data.get("distance")
         activity.moving_time_s = activity_data.get("moving_time")
@@ -318,7 +324,8 @@ def upsert_activity(db: Session, user_id: int, activity_data: Dict) -> Activity:
         activity = Activity(
             id=activity_id,
             user_id=user_id,
-            type=activity_data.get("sport_type") or activity_data.get("type"),
+            sport_type=sport_type,
+            type=activity_type,
             start_date=start_date,
             distance_m=activity_data.get("distance"),
             moving_time_s=activity_data.get("moving_time"),

@@ -63,7 +63,8 @@ class Activity(Base):
     
     id = Column(BigInteger, primary_key=True)  # Strava activity ID
     user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    type = Column(String, nullable=True)  # Activity type (e.g., "Swim", "Run", "Bike")
+    sport_type = Column(String, nullable=True, index=True)  # Strava sport_type (preferred: "Swim", "Run", "Ride", "OpenWaterSwim", etc.)
+    type = Column(String, nullable=True)  # Activity type (fallback: "Swim", "Run", "Bike")
     start_date = Column(DateTime(timezone=True), nullable=True)  # Activity start time
     distance_m = Column(Float, nullable=True)  # Distance in meters
     moving_time_s = Column(Integer, nullable=True)  # Moving time in seconds
@@ -78,7 +79,7 @@ class Activity(Base):
     user = relationship("User", back_populates="activities")
     
     def __repr__(self):
-        return f"<Activity(id={self.id}, user_id={self.user_id}, type={self.type})>"
+        return f"<Activity(id={self.id}, user_id={self.user_id}, sport_type={self.sport_type}, type={self.type})>"
 
 
 def init_db():
