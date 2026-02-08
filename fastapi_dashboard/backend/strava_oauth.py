@@ -409,14 +409,46 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
 async def strava_status():
     """
     Check if user is connected to Strava.
+    Returns connection status and athlete information including athlete_id.
     """
+    # Try database first
+    if DB_AVAILABLE:
+        try:
+            db_gen = get_db()
+            db = next(db_gen)
+            
+            try:
+                # Get any user with a token (for MVP, get the first one)
+                from models import User, StravaToken
+                token = db.query(StravaToken).join(User).first()
+                
+                if token and token.user:
+                    # Get athlete info from raw_json or construct from user
+                    athlete_id = token.user.strava_athlete_id
+                    return {
+                        "connected": True,
+                        "athlete_id": athlete_id,
+                        "athlete": {
+                            "id": athlete_id,
+                            "firstname": "User",  # Could be stored in user model later
+                            "lastname": ""
+                        }
+                    }
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"WARNING: Error checking database for Strava status: {e}")
+    
+    # Fall back to in-memory storage
     user_id = "default_user"  # TODO: Get from session
     
     is_connected = user_id in strava_tokens and strava_tokens[user_id].get("access_token")
+    athlete_data = strava_tokens[user_id].get("athlete", {}) if is_connected else None
     
     return {
         "connected": is_connected,
-        "athlete": strava_tokens[user_id].get("athlete", {}) if is_connected else None
+        "athlete_id": athlete_data.get("id") if athlete_data else None,
+        "athlete": athlete_data
     }
 
 

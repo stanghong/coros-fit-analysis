@@ -2043,7 +2043,25 @@
             if (activitiesList) activitiesList.style.display = 'none';
             
             try {
-                const response = await fetch('/strava/import-latest');
+                // First, get athlete_id from status
+                let athleteId = null;
+                try {
+                    const statusResponse = await fetch('/strava/status');
+                    const status = await statusResponse.json();
+                    if (status.connected && status.athlete_id) {
+                        athleteId = status.athlete_id;
+                    } else if (status.connected && status.athlete && status.athlete.id) {
+                        athleteId = status.athlete.id;
+                    }
+                } catch (e) {
+                    console.error('Failed to get athlete_id from status:', e);
+                }
+                
+                if (!athleteId) {
+                    throw new Error('Could not determine athlete_id. Please reconnect to Strava.');
+                }
+                
+                const response = await fetch(`/strava/import-latest?athlete_id=${athleteId}&limit=30`);
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.detail || 'Failed to import activities');

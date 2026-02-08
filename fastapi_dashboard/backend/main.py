@@ -187,6 +187,24 @@ if STRAVA_ENABLED:
 else:
     print("INFO: Strava integration is disabled via STRAVA_ENABLED environment variable.")
 
+# Import dev routes only when ENV=dev
+ENV = os.getenv("ENV", "").lower()
+if ENV == "dev":
+    try:
+        try:
+            from .dev_routes import router as dev_router
+        except ImportError:
+            from dev_routes import router as dev_router
+        
+        app.include_router(dev_router)
+        print("INFO: Dev routes loaded. Available at /dev/*")
+    except ImportError as e:
+        print(f"WARNING: Could not import dev routes: {e}")
+    except Exception as e:
+        print(f"WARNING: Error loading dev routes: {e}")
+else:
+    print(f"INFO: Dev routes disabled (ENV={ENV}, not 'dev')")
+
 
 @app.post("/api/analyze")
 async def analyze_workout_file(file: UploadFile = File(...)):
@@ -425,8 +443,37 @@ async def db_status():
         )
     
     try:
-        status = check_db_status()
-        status_code = 200 if status.get("tables_exist") else 503
+        from sqlalchemy import inspect, text
+        from sqlalchemy.orm import Session
+        
+        inspector = inspect(engine)
+        table_names = inspector.get_table_names()
+        
+        # Check if our tables exist
+        required_tables = {"users", "strava_tokens", "activities"}
+        tables_exist = required_tables.issubset(set(table_names))
+        
+        if not tables_exist:
+            status = {
+                "tables_exist": False,
+                "existing_tables": table_names,
+                "required_tables": list(required_tables),
+                "error": f"Missing tables. Found: {table_names}, Required: {list(required_tables)}"
+            }
+            status_code = 503
+        else:
+            # If tables exist, try to count users
+            with Session(engine) as session:
+                result = session.execute(text("SELECT COUNT(*) FROM users"))
+                user_count = result.scalar()
+            
+            status = {
+                "tables_exist": True,
+                "user_count": user_count,
+                "existing_tables": table_names
+            }
+            status_code = 200
+        
         return JSONResponse(status_code=status_code, content=status)
     except Exception as e:
         return JSONResponse(
