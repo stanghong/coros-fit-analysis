@@ -619,15 +619,15 @@ async def debug_strava_athlete(athlete_id: Optional[int] = None):
         }
     """
     if not DB_AVAILABLE:
-        raise HTTPException(
+        return JSONResponse(
             status_code=503,
-            detail="Database not available. Athlete check requires database."
+            content={"error": "Database not available. Athlete check requires database."}
         )
     
     if httpx is None:
-        raise HTTPException(
+        return JSONResponse(
             status_code=500,
-            detail="httpx library not installed"
+            content={"error": "httpx library not installed"}
         )
     
     try:
@@ -643,18 +643,18 @@ async def debug_strava_athlete(athlete_id: Optional[int] = None):
                 if token and token.user:
                     athlete_id = token.user.strava_athlete_id
                 else:
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=401,
-                        detail="Not connected to Strava. No token found."
+                        content={"error": "Not connected to Strava"}
                     )
             
             # Ensure we have a valid access token
             access_token = await ensure_valid_access_token(db, athlete_id)
             
             if not access_token:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=401,
-                    detail="Not connected to Strava. No valid token found or refresh failed."
+                    content={"error": "Not connected to Strava. No valid token found or refresh failed."}
                 )
             
             # Call Strava API to get athlete info
@@ -672,9 +672,12 @@ async def debug_strava_athlete(athlete_id: Optional[int] = None):
                         error_detail = str(error_json)
                     except:
                         pass
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=athlete_response.status_code,
-                        detail=f"Strava API returned {athlete_response.status_code}: {error_detail}"
+                        content={
+                            "error": "strava_error",
+                            "details": error_detail
+                        }
                     )
                 
                 athlete_response.raise_for_status()
@@ -693,9 +696,9 @@ async def debug_strava_athlete(athlete_id: Optional[int] = None):
     except Exception as e:
         import traceback
         print(f"ERROR: Exception in debug_strava_athlete: {str(e)}\n{traceback.format_exc()}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=500,
-            detail=f"Error checking Strava athlete: {str(e)}"
+            content={"error": f"Error checking Strava athlete: {str(e)}"}
         )
 
 
