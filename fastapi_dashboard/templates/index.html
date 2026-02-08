@@ -2009,11 +2009,10 @@
                     statusDiv.innerHTML = `
                         <p style="color: #2ecc71; font-weight: bold;">✓ Found ${totalCount} activities</p>
                     `;
-                } else {
-                    statusDiv.innerHTML = '<p style="color: #f39c12;">No activities found</p>';
-                } else {
+                    
                     if (activitiesList) activitiesList.style.display = 'block';
                 } else {
+                    statusDiv.innerHTML = '<p style="color: #f39c12;">No activities found</p>';
                     statusDiv.innerHTML = '<p style="color: #f39c12;">No activities found</p>';
                 }
                 
