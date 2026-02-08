@@ -42,6 +42,15 @@ try:
             try:
                 Base.metadata.create_all(bind=engine)
                 print("INFO: Database tables auto-created")
+                
+                # Run migration to add new columns if they don't exist
+                try:
+                    from migrate_add_athlete_info import migrate_add_athlete_info
+                    migrate_add_athlete_info()
+                except ImportError:
+                    print("INFO: Migration script not found, skipping column migration")
+                except Exception as e:
+                    print(f"WARNING: Migration failed (this is OK if columns already exist): {e}")
             except Exception as e:
                 print(f"WARNING: Failed to auto-create database tables: {e}")
                 print("Database features may not work correctly.")
