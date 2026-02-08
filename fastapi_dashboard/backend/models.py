@@ -23,14 +23,18 @@ class User(Base):
     
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     strava_athlete_id = Column(BigInteger, unique=True, nullable=False, index=True)
+    strava_username = Column(String, nullable=True)  # Strava username
+    strava_firstname = Column(String, nullable=True)  # Strava first name
+    strava_lastname = Column(String, nullable=True)  # Strava last name
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
     # Relationships
     strava_tokens = relationship("StravaToken", back_populates="user", cascade="all, delete-orphan")
     activities = relationship("Activity", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<User(id={self.id}, strava_athlete_id={self.strava_athlete_id})>"
+        return f"<User(id={self.id}, strava_athlete_id={self.strava_athlete_id}, username={self.strava_username})>"
 
 
 class StravaToken(Base):

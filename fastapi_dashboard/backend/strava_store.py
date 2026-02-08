@@ -19,13 +19,15 @@ STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID", "")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET", "")
 
 
-def get_or_create_user(db: Session, athlete_id: int) -> User:
+def get_or_create_user(db: Session, athlete_id: int, athlete_info: Optional[Dict] = None) -> User:
     """
     Get or create a user for the given Strava athlete ID.
+    Optionally update athlete info (username, firstname, lastname).
     
     Args:
         db: SQLAlchemy database session
         athlete_id: Strava athlete ID
+        athlete_info: Optional dict with 'username', 'firstname', 'lastname' keys
         
     Returns:
         User object (existing or newly created)
@@ -34,10 +36,28 @@ def get_or_create_user(db: Session, athlete_id: int) -> User:
     user = db.query(User).filter(User.strava_athlete_id == athlete_id).first()
     
     if user:
+        # Update athlete info if provided
+        if athlete_info:
+            if 'username' in athlete_info:
+                user.strava_username = athlete_info.get('username')
+            if 'firstname' in athlete_info:
+                user.strava_firstname = athlete_info.get('firstname')
+            if 'lastname' in athlete_info:
+                user.strava_lastname = athlete_info.get('lastname')
+            try:
+                db.commit()
+                db.refresh(user)
+            except Exception as e:
+                print(f"WARNING: Failed to update athlete info: {e}")
         return user
     
     # Create new user if not found
-    user = User(strava_athlete_id=athlete_id)
+    user = User(
+        strava_athlete_id=athlete_id,
+        strava_username=athlete_info.get('username') if athlete_info else None,
+        strava_firstname=athlete_info.get('firstname') if athlete_info else None,
+        strava_lastname=athlete_info.get('lastname') if athlete_info else None
+    )
     db.add(user)
     
     try:
@@ -50,6 +70,19 @@ def get_or_create_user(db: Session, athlete_id: int) -> User:
         # Try to fetch again
         user = db.query(User).filter(User.strava_athlete_id == athlete_id).first()
         if user:
+            # Update athlete info if provided
+            if athlete_info:
+                if 'username' in athlete_info:
+                    user.strava_username = athlete_info.get('username')
+                if 'firstname' in athlete_info:
+                    user.strava_firstname = athlete_info.get('firstname')
+                if 'lastname' in athlete_info:
+                    user.strava_lastname = athlete_info.get('lastname')
+                try:
+                    db.commit()
+                    db.refresh(user)
+                except Exception as e:
+                    print(f"WARNING: Failed to update athlete info: {e}")
             return user
         raise
 

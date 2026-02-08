@@ -108,6 +108,17 @@ def create_minimal_dataframe_from_activity(activity: Dict) -> pd.DataFrame:
 
 
 def is_swimming_activity(activity: Dict) -> bool:
-    """Check if activity is a swimming workout."""
-    sport_type = activity.get('sport_type', '').lower()
-    return sport_type == 'swim' or 'swim' in sport_type
+    """
+    Check if activity is a swimming workout.
+    Uses both sport_type and type fields, case-insensitive.
+    """
+    sport_type = (activity.get('sport_type') or '').lower()
+    activity_type = (activity.get('type') or '').lower()
+    
+    # Check if it's a swim: sport_type or type contains "swim"
+    return (
+        "swim" in sport_type or 
+        "swim" in activity_type or
+        sport_type in ("swim", "openwaterswim") or
+        activity_type == "swim"
+    )

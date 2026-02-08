@@ -2096,8 +2096,16 @@
                 const data = await response.json();
                 
                 if (data.activities && data.activities.length > 0) {
-                    // Filter for swimming activities
-                    const swimActivities = data.activities.filter(a => a.is_swim);
+                    // Use swim_activities if provided, otherwise filter
+                    let swimActivities = data.swim_activities || data.activities.filter(a => a.is_swim);
+                    
+                    // If no swim_activities provided, do client-side filtering with robust matching
+                    if (!data.swim_activities || data.swim_activities.length === 0) {
+                        swimActivities = data.activities.filter(a => {
+                            const type = (a.type || "").toLowerCase();
+                            return type.includes("swim") || type === "swim" || type === "openwaterswim";
+                        });
+                    }
                     
                     if (swimActivities.length === 0) {
                         statusDiv.innerHTML = `
@@ -2348,10 +2356,43 @@
                     if (importBox) importBox.style.display = 'block';
                     if (reconnectBtn) reconnectBtn.style.display = 'inline-block'; // Always show reconnect option
                     
-                    // Show athlete info
+                    // Show athlete info - fetch from debug endpoint for real name
                     const athleteInfo = document.getElementById('stravaAthleteInfo');
-                    if (athleteInfo && status.athlete) {
-                        athleteInfo.textContent = `Connected as ${status.athlete.firstname || ''} ${status.athlete.lastname || ''}`;
+                    if (athleteInfo && status.athlete_id) {
+                        // Try to fetch real athlete info from debug endpoint
+                        fetch(`/strava/debug/strava-athlete?athlete_id=${status.athlete_id}`)
+                            .then(response => {
+                                if (response.ok) {
+                                    return response.json();
+                                }
+                                throw new Error('Failed to fetch athlete info');
+                            })
+                            .then(athleteData => {
+                                if (athleteData) {
+                                    const nameParts = [];
+                                    if (athleteData.firstname) nameParts.push(athleteData.firstname);
+                                    if (athleteData.lastname) nameParts.push(athleteData.lastname);
+                                    const name = nameParts.length > 0 ? nameParts.join(' ') : 'User';
+                                    const username = athleteData.username ? `@${athleteData.username}` : '';
+                                    athleteInfo.textContent = `Connected as ${name}${username ? ' ' + username : ''}`;
+                                } else {
+                                    // Fallback to status.athlete
+                                    const nameParts = [];
+                                    if (status.athlete && status.athlete.firstname) nameParts.push(status.athlete.firstname);
+                                    if (status.athlete && status.athlete.lastname) nameParts.push(status.athlete.lastname);
+                                    const name = nameParts.length > 0 ? nameParts.join(' ') : 'User';
+                                    athleteInfo.textContent = `Connected as ${name}`;
+                                }
+                            })
+                            .catch(error => {
+                                console.warn('Failed to fetch athlete info from debug endpoint:', error);
+                                // Fallback to status.athlete
+                                const nameParts = [];
+                                if (status.athlete && status.athlete.firstname) nameParts.push(status.athlete.firstname);
+                                if (status.athlete && status.athlete.lastname) nameParts.push(status.athlete.lastname);
+                                const name = nameParts.length > 0 ? nameParts.join(' ') : 'User';
+                                athleteInfo.textContent = `Connected as ${name}`;
+                            });
                     } else if (athleteInfo) {
                         athleteInfo.textContent = 'Connected to Strava';
                     }

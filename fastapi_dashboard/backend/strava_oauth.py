@@ -139,6 +139,28 @@ async def strava_callback(
                     detail="No athlete ID in Strava response"
                 )
             
+            # Get fresh athlete info from Strava API using the new access token
+            access_token = token_data.get("access_token")
+            athlete_info = None
+            if access_token and httpx:
+                try:
+                    async with httpx.AsyncClient() as client:
+                        athlete_response = await client.get(
+                            "https://www.strava.com/api/v3/athlete",
+                            headers={"Authorization": f"Bearer {access_token}"},
+                            timeout=10.0
+                        )
+                        if athlete_response.status_code == 200:
+                            athlete_info = athlete_response.json()
+                            print(f"INFO: Fetched athlete info: id={athlete_info.get('id')}, "
+                                  f"username={athlete_info.get('username')}, "
+                                  f"firstname={athlete_info.get('firstname')}, "
+                                  f"lastname={athlete_info.get('lastname')}")
+                        else:
+                            print(f"WARNING: Failed to fetch athlete info: {athlete_response.status_code} - {athlete_response.text}")
+                except Exception as e:
+                    print(f"WARNING: Exception fetching athlete info: {str(e)}")
+            
             # Persist tokens to database if available
             if DB_AVAILABLE:
                 try:
@@ -147,8 +169,17 @@ async def strava_callback(
                     db = next(db_gen)
                     
                     try:
-                        # Get or create user for this athlete
-                        user = get_or_create_user(db, athlete_id)
+                        # Prepare athlete info dict for user creation/update
+                        athlete_info_dict = None
+                        if athlete_info:
+                            athlete_info_dict = {
+                                "username": athlete_info.get("username"),
+                                "firstname": athlete_info.get("firstname"),
+                                "lastname": athlete_info.get("lastname")
+                            }
+                        
+                        # Get or create user for this athlete (with athlete info)
+                        user = get_or_create_user(db, athlete_id, athlete_info_dict)
                         
                         # Prepare token payload
                         token_payload = {
@@ -161,7 +192,8 @@ async def strava_callback(
                         # Upsert token
                         upsert_strava_token(db, user.id, token_payload)
                         
-                        print(f"INFO: Strava tokens persisted for athlete_id={athlete_id}, user_id={user.id}")
+                        print(f"INFO: Strava tokens persisted for athlete_id={athlete_id}, user_id={user.id}, "
+                              f"username={user.strava_username}, name={user.strava_firstname} {user.strava_lastname}")
                     finally:
                         db.close()
                 except Exception as e:
@@ -375,6 +407,17 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
                 activities_response.raise_for_status()
                 activities = activities_response.json()
             
+            # Debug logging: log first 5 activities (if DEBUG_STRAVA env var is set)
+            debug_strava = os.getenv("DEBUG_STRAVA", "0").lower() in ("1", "true", "yes", "on")
+            if debug_strava and activities:
+                print(f"DEBUG: First {min(5, len(activities))} activities from Strava:")
+                for i, activity in enumerate(activities[:5], 1):
+                    print(f"  {i}. name={activity.get('name')}, "
+                          f"start_date={activity.get('start_date')}, "
+                          f"type={activity.get('type')}, "
+                          f"sport_type={activity.get('sport_type')}, "
+                          f"private={activity.get('private')}")
+            
             # Upsert each activity into database
             imported_activities = []
             for activity_data in activities:
@@ -410,10 +453,54 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
                     # Continue with other activities
                     continue
             
+            # Filter for swimming activities with robust matching
+            swim_activities = []
+            for activity in imported_activities:
+                # Get the full activity data from raw_json if available
+                activity_data = None
+                for a in activities:
+                    if a.get("id") == activity["id"]:
+                        activity_data = a
+                        break
+                
+                if activity_data:
+                    sport_type = (activity_data.get("sport_type") or "").lower()
+                    activity_type = (activity_data.get("type") or "").lower()
+                    
+                    # Check if it's a swim: sport_type or type contains "swim"
+                    is_swim = (
+                        "swim" in sport_type or 
+                        "swim" in activity_type or
+                        sport_type in ("swim", "openwaterswim") or
+                        activity_type == "swim"
+                    )
+                    
+                    if is_swim:
+                        activity["is_swim"] = True
+                        swim_activities.append(activity)
+                    else:
+                        activity["is_swim"] = False
+                else:
+                    # Fallback: check type field
+                    activity_type = (activity.get("type") or "").lower()
+                    if "swim" in activity_type:
+                        activity["is_swim"] = True
+                        swim_activities.append(activity)
+                    else:
+                        activity["is_swim"] = False
+            
+            # Log swim filtering results
+            print(f"INFO: Imported {len(imported_activities)} activities, found {len(swim_activities)} swimming activities")
+            if len(swim_activities) == 0 and len(imported_activities) > 0:
+                print(f"WARNING: No swimming activities found in {len(imported_activities)} activities. "
+                      f"Activity types: {[a.get('type', 'unknown') for a in imported_activities[:5]]}")
+            
             return {
                 "status": "success",
                 "count": len(imported_activities),
-                "activities": imported_activities
+                "swim_count": len(swim_activities),
+                "activities": imported_activities,
+                "swim_activities": swim_activities
             }
         
         finally:
@@ -474,8 +561,9 @@ async def strava_status():
                         "athlete_id": athlete_id,
                         "athlete": {
                             "id": athlete_id,
-                            "firstname": "User",  # Could be stored in user model later
-                            "lastname": ""
+                            "username": token.user.strava_username,
+                            "firstname": token.user.strava_firstname or "User",
+                            "lastname": token.user.strava_lastname or ""
                         }
                     }
                 else:
@@ -496,6 +584,104 @@ async def strava_status():
         "athlete_id": athlete_data.get("id") if athlete_data else None,
         "athlete": athlete_data
     }
+
+
+@router.get("/debug/strava-athlete")
+async def debug_strava_athlete(athlete_id: Optional[int] = None):
+    """
+    Debug endpoint to check which Strava athlete we're connected as.
+    Calls Strava GET /api/v3/athlete and returns athlete info.
+    
+    Args:
+        athlete_id: Strava athlete ID (query parameter, optional - will use most recent if not provided)
+        
+    Returns:
+        {
+            "id": int,
+            "username": str,
+            "firstname": str,
+            "lastname": str
+        }
+    """
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Athlete check requires database."
+        )
+    
+    if httpx is None:
+        raise HTTPException(
+            status_code=500,
+            detail="httpx library not installed"
+        )
+    
+    try:
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # If athlete_id not provided, get the most recent token
+            if not athlete_id:
+                from models import User, StravaToken
+                token = db.query(StravaToken).join(User).order_by(StravaToken.updated_at.desc()).first()
+                if token and token.user:
+                    athlete_id = token.user.strava_athlete_id
+                else:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Not connected to Strava. No token found."
+                    )
+            
+            # Ensure we have a valid access token
+            access_token = await ensure_valid_access_token(db, athlete_id)
+            
+            if not access_token:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Not connected to Strava. No valid token found or refresh failed."
+                )
+            
+            # Call Strava API to get athlete info
+            async with httpx.AsyncClient() as client:
+                athlete_response = await client.get(
+                    "https://www.strava.com/api/v3/athlete",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=10.0
+                )
+                
+                if athlete_response.status_code == 401 or athlete_response.status_code == 403:
+                    error_detail = athlete_response.text
+                    try:
+                        error_json = athlete_response.json()
+                        error_detail = str(error_json)
+                    except:
+                        pass
+                    raise HTTPException(
+                        status_code=athlete_response.status_code,
+                        detail=f"Strava API returned {athlete_response.status_code}: {error_detail}"
+                    )
+                
+                athlete_response.raise_for_status()
+                athlete_data = athlete_response.json()
+                
+                return {
+                    "id": athlete_data.get("id"),
+                    "username": athlete_data.get("username"),
+                    "firstname": athlete_data.get("firstname"),
+                    "lastname": athlete_data.get("lastname")
+                }
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"ERROR: Exception in debug_strava_athlete: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error checking Strava athlete: {str(e)}"
+        )
 
 
 @router.get("/token-check")
