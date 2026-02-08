@@ -318,7 +318,7 @@ async def strava_callback(
 
 
 @router.get("/import-latest")
-async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 10):
+async def import_latest_activity(request: Request, athlete_id: Optional[int] = None, limit: int = 10):
     """
     Fetch latest activities from Strava API and cache them in the database.
     
