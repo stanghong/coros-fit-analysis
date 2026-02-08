@@ -678,9 +678,7 @@
         <div style="display: flex; gap: 10px; padding: 20px; background: #f8f9ff; border-bottom: 2px solid #e0e0e0;">
             <button class="tab-btn active" onclick="switchTab('single')" id="tabSingle">Single Workout</button>
             <button class="tab-btn" onclick="switchTab('compare')" id="tabCompare">Compare Workouts</button>
-            {% if strava_enabled %}
-            <button class="tab-btn" onclick="switchTab('strava')" id="tabStrava">Connect Strava</button>
-            {% endif %}
+            <button class="tab-btn" onclick="switchTab('strava')" id="tabStrava" style="display: none;">Connect Strava</button>
         </div>
         
         <!-- Single Workout Section -->
@@ -716,7 +714,6 @@
         </div>
         
         <!-- Strava Section (only shown if enabled) -->
-        {% if strava_enabled %}
         <div id="stravaSection" class="tab-section" style="display: none;">
             <div class="upload-section">
                 <div class="upload-box" id="stravaConnectBox">
@@ -753,7 +750,6 @@
                 </div>
             </div>
         </div>
-        {% endif %}
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
@@ -2323,7 +2319,12 @@
         
         // Load config on page load
         window.addEventListener('DOMContentLoaded', function() {
+            // Update UI immediately based on server-side value
+            updateUIForStrava();
+            
+            // Then load config from API and update again
             loadConfig().then(() => {
+                updateUIForStrava();
                 checkStravaStatus();
             });
             

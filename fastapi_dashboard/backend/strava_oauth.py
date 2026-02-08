@@ -322,10 +322,18 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
             access_token = await ensure_valid_access_token(db, athlete_id)
             
             if not access_token:
-                raise HTTPException(
-                    status_code=401,
-                    detail="No valid token found for this athlete_id. Please reconnect Strava."
-                )
+                # Check if token exists but refresh failed
+                token = get_token_for_athlete(db, athlete_id)
+                if token:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Strava access token expired and refresh failed. Please reconnect your Strava account."
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="No valid token found for this athlete_id. Please reconnect Strava."
+                    )
             
             # Get or create user for this athlete
             user = get_or_create_user(db, athlete_id)
@@ -388,6 +396,14 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
         raise
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
+            # Token expired or invalid - refresh might have failed
+            # Check if it's a token issue or something else
+            error_text = e.response.text
+            if "invalid" in error_text.lower() or "expired" in error_text.lower():
+                raise HTTPException(
+                    status_code=401,
+                    detail="Strava access token expired or invalid. The token refresh may have failed. Please reconnect your Strava account."
+                )
             raise HTTPException(
                 status_code=401,
                 detail="Strava access token expired or invalid. Please reconnect your Strava account."
