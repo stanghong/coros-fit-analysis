@@ -3,7 +3,7 @@ Strava OAuth integration for importing workouts.
 """
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 import os
 from typing import Optional
 
@@ -12,6 +12,16 @@ try:
 except ImportError:
     httpx = None
     print("Warning: httpx not installed. Strava features will not work.")
+
+# Import database dependencies
+try:
+    from db import get_db
+    from models import User, StravaToken
+    from strava_store import get_or_create_user, upsert_strava_token, ensure_valid_access_token, get_token_for_athlete, upsert_activity
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+    print("Warning: Database not available. Token persistence will not work.")
 
 router = APIRouter(prefix="/strava", tags=["strava"])
 
@@ -55,9 +65,14 @@ async def strava_login():
 
 
 @router.get("/callback")
-async def strava_callback(request: Request, code: Optional[str] = None, error: Optional[str] = None):
+async def strava_callback(
+    request: Request,
+    code: Optional[str] = None,
+    error: Optional[str] = None
+):
     """
     Handle Strava OAuth callback and exchange code for access token.
+    Persists tokens to database if available.
     """
     if error:
         raise HTTPException(status_code=400, detail=f"Strava authorization error: {error}")
@@ -81,7 +96,7 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
     # IMPORTANT: The redirect_uri must match EXACTLY what was used in the authorization request
     # Also, authorization codes can only be used once and expire quickly
     try:
-        # Log the redirect URI being used for debugging
+        # Log the redirect URI being used for debugging (but not secrets)
         print(f"DEBUG: Using redirect_uri: {STRAVA_REDIRECT_URI}")
         print(f"DEBUG: Client ID: {STRAVA_CLIENT_ID}")
         print(f"DEBUG: Code received: {code[:20]}...")
@@ -114,18 +129,117 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
             
             token_data = token_response.json()
             
-            # Store tokens (in production, use database with user session)
-            # For now, using a simple identifier - in production, use actual user session
-            user_id = "default_user"  # TODO: Get from session
-            strava_tokens[user_id] = {
-                "access_token": token_data.get("access_token"),
-                "refresh_token": token_data.get("refresh_token"),
-                "expires_at": token_data.get("expires_at"),
-                "athlete": token_data.get("athlete", {})
-            }
+            # Extract athlete ID and token information
+            athlete = token_data.get("athlete", {})
+            athlete_id = athlete.get("id")
             
-            # Redirect back to dashboard with success message
-            return RedirectResponse(url="/?strava_connected=true")
+            if not athlete_id:
+                raise HTTPException(
+                    status_code=500,
+                    detail="No athlete ID in Strava response"
+                )
+            
+            # Persist tokens to database if available
+            if DB_AVAILABLE:
+                try:
+                    # Get database session
+                    db_gen = get_db()
+                    db = next(db_gen)
+                    
+                    try:
+                        # Get or create user for this athlete
+                        user = get_or_create_user(db, athlete_id)
+                        
+                        # Prepare token payload
+                        token_payload = {
+                            "access_token": token_data.get("access_token"),
+                            "refresh_token": token_data.get("refresh_token"),
+                            "expires_at": token_data.get("expires_at"),
+                            "scope": token_data.get("scope")
+                        }
+                        
+                        # Upsert token
+                        upsert_strava_token(db, user.id, token_payload)
+                        
+                        print(f"INFO: Strava tokens persisted for athlete_id={athlete_id}, user_id={user.id}")
+                    finally:
+                        db.close()
+                except Exception as e:
+                    # Log error but don't fail the OAuth flow
+                    print(f"WARNING: Failed to persist tokens to database: {str(e)}")
+                    # Fall back to in-memory storage
+                    user_id = "default_user"
+                    strava_tokens[user_id] = {
+                        "access_token": token_data.get("access_token"),
+                        "refresh_token": token_data.get("refresh_token"),
+                        "expires_at": token_data.get("expires_at"),
+                        "athlete": athlete
+                    }
+            else:
+                # Fall back to in-memory storage if database not available
+                print("WARNING: Database not available, storing tokens in-memory only")
+                user_id = "default_user"
+                strava_tokens[user_id] = {
+                    "access_token": token_data.get("access_token"),
+                    "refresh_token": token_data.get("refresh_token"),
+                    "expires_at": token_data.get("expires_at"),
+                    "athlete": athlete
+                }
+            
+            # Return simple HTML success page
+            return HTMLResponse(content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Strava Connected</title>
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    }}
+                    .container {{
+                        text-align: center;
+                        background: white;
+                        padding: 40px;
+                        border-radius: 10px;
+                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    }}
+                    h1 {{
+                        color: #667eea;
+                        margin-bottom: 20px;
+                    }}
+                    p {{
+                        color: #666;
+                        margin-bottom: 30px;
+                    }}
+                    a {{
+                        display: inline-block;
+                        padding: 12px 24px;
+                        background: #667eea;
+                        color: white;
+                        text-decoration: none;
+                        border-radius: 5px;
+                        transition: background 0.3s;
+                    }}
+                    a:hover {{
+                        background: #5568d3;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>✅ Strava Connected</h1>
+                    <p>Your Strava account has been successfully connected!</p>
+                    <a href="/">Go to Dashboard</a>
+                </div>
+            </body>
+            </html>
+            """)
     
     except HTTPException:
         # Re-raise HTTPException as-is (don't wrap it)
@@ -151,26 +265,45 @@ async def strava_callback(request: Request, code: Optional[str] = None, error: O
 
 
 @router.get("/import-latest")
-async def import_latest_activity():
+async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 10):
     """
-    Fetch latest activities from Strava API.
-    Returns list of recent activities.
-    """
-    user_id = "default_user"  # TODO: Get from session
+    Fetch latest activities from Strava API and cache them in the database.
     
-    if user_id not in strava_tokens:
+    Args:
+        athlete_id: Strava athlete ID (query parameter, required)
+        limit: Maximum number of activities to import (default: 10, max: 200)
+        
+    Returns:
+        {
+            "status": "success",
+            "count": int,
+            "activities": [
+                {
+                    "id": int,
+                    "name": str,
+                    "type": str,
+                    "start_date": str,
+                    "distance": float
+                }
+            ]
+        }
+    """
+    if not athlete_id:
         raise HTTPException(
-            status_code=401,
-            detail="Not connected to Strava. Please connect your Strava account first."
+            status_code=400,
+            detail="athlete_id query parameter is required"
         )
     
-    tokens = strava_tokens[user_id]
-    access_token = tokens.get("access_token")
-    
-    if not access_token:
+    if limit < 1 or limit > 200:
         raise HTTPException(
-            status_code=401,
-            detail="No access token found. Please reconnect your Strava account."
+            status_code=400,
+            detail="limit must be between 1 and 200"
+        )
+    
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Activity caching requires database."
         )
     
     if httpx is None:
@@ -179,36 +312,80 @@ async def import_latest_activity():
             detail="httpx library not installed. Please install dependencies: pip install httpx"
         )
     
-    # Fetch athlete activities from Strava API
     try:
-        async with httpx.AsyncClient() as client:
-            activities_response = await client.get(
-                "https://www.strava.com/api/v3/athlete/activities",
-                headers={"Authorization": f"Bearer {access_token}"},
-                params={"per_page": 30}  # Get last 30 activities
-            )
-            activities_response.raise_for_status()
-            activities = activities_response.json()
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # Ensure we have a valid access token (refresh if needed)
+            access_token = await ensure_valid_access_token(db, athlete_id)
             
-            # Filter for swimming activities and format for frontend
-            formatted_activities = []
-            for activity in activities:
-                formatted_activities.append({
-                    "id": activity.get("id"),
-                    "name": activity.get("name", "Untitled"),
-                    "type": activity.get("sport_type", "Unknown"),
-                    "distance": activity.get("distance", 0),  # meters
-                    "duration": activity.get("elapsed_time", 0),  # seconds
-                    "start_date": activity.get("start_date"),
-                    "is_swim": activity.get("sport_type", "").lower() == "swim"
-                })
+            if not access_token:
+                raise HTTPException(
+                    status_code=401,
+                    detail="No valid token found for this athlete_id. Please reconnect Strava."
+                )
+            
+            # Get or create user for this athlete
+            user = get_or_create_user(db, athlete_id)
+            
+            # Fetch activities from Strava API
+            async with httpx.AsyncClient() as client:
+                activities_response = await client.get(
+                    "https://www.strava.com/api/v3/athlete/activities",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"per_page": limit, "page": 1}
+                )
+                activities_response.raise_for_status()
+                activities = activities_response.json()
+            
+            # Upsert each activity into database
+            imported_activities = []
+            for activity_data in activities:
+                try:
+                    # Prepare activity data with raw_json
+                    activity_payload = {
+                        "id": activity_data.get("id"),
+                        "sport_type": activity_data.get("sport_type"),
+                        "type": activity_data.get("type"),
+                        "start_date": activity_data.get("start_date"),
+                        "distance": activity_data.get("distance"),
+                        "moving_time": activity_data.get("moving_time"),
+                        "elapsed_time": activity_data.get("elapsed_time"),
+                        "average_heartrate": activity_data.get("average_heartrate"),
+                        "max_heartrate": activity_data.get("max_heartrate"),
+                        "total_elevation_gain": activity_data.get("total_elevation_gain"),
+                        "raw_json": activity_data  # Store full response
+                    }
+                    
+                    # Upsert activity
+                    activity = upsert_activity(db, user.id, activity_payload)
+                    
+                    # Format for response
+                    imported_activities.append({
+                        "id": activity.id,
+                        "name": activity_data.get("name", "Untitled"),
+                        "type": activity.type or activity_data.get("sport_type", "Unknown"),
+                        "start_date": activity_data.get("start_date"),
+                        "distance": activity.distance_m or 0
+                    })
+                except Exception as e:
+                    print(f"WARNING: Failed to upsert activity {activity_data.get('id')}: {str(e)}")
+                    # Continue with other activities
+                    continue
             
             return {
                 "status": "success",
-                "count": len(formatted_activities),
-                "activities": formatted_activities
+                "count": len(imported_activities),
+                "activities": imported_activities
             }
+        
+        finally:
+            db.close()
     
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
             raise HTTPException(
@@ -220,9 +397,11 @@ async def import_latest_activity():
             detail=f"Failed to fetch activities from Strava: {e.response.text}"
         )
     except Exception as e:
+        import traceback
+        print(f"ERROR: Failed to import activities: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error fetching Strava activities: {str(e)}"
+            detail=f"Error importing Strava activities: {str(e)}"
         )
 
 
@@ -239,6 +418,77 @@ async def strava_status():
         "connected": is_connected,
         "athlete": strava_tokens[user_id].get("athlete", {}) if is_connected else None
     }
+
+
+@router.get("/token-check")
+async def token_check(athlete_id: Optional[int] = None):
+    """
+    Check and refresh Strava token if needed.
+    
+    Args:
+        athlete_id: Strava athlete ID (query parameter, required for MVP)
+        
+    Returns:
+        {
+            "valid": bool,
+            "expires_at": int (Unix timestamp) if valid,
+            "error": str if invalid/error
+        }
+    """
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Token check requires database."
+        )
+    
+    try:
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # Ensure we have a valid access token (refresh if needed)
+            access_token = await ensure_valid_access_token(db, athlete_id)
+            
+            if not access_token:
+                return {
+                    "valid": False,
+                    "error": "No token found for this athlete_id. Please reconnect Strava."
+                }
+            
+            # Get token to check expires_at
+            token = get_token_for_athlete(db, athlete_id)
+            
+            if not token:
+                return {
+                    "valid": False,
+                    "error": "Token record not found"
+                }
+            
+            # Return success with expires_at (but not the token itself)
+            return {
+                "valid": True,
+                "expires_at": token.expires_at
+            }
+        
+        finally:
+            db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Safe error handling - don't leak internal details
+        print(f"ERROR: Token check failed for athlete_id={athlete_id}: {str(e)}")
+        return {
+            "valid": False,
+            "error": "Failed to check token status"
+        }
 
 
 @router.post("/analyze-activities")

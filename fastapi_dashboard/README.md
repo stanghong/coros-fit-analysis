@@ -32,6 +32,33 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+4. (Optional) Set up database connection:
+   
+   Create a `.env` file in the `fastapi_dashboard` directory:
+   ```bash
+   # For local PostgreSQL
+   DATABASE_URL=postgresql://user:password@localhost:5432/coros_fit?sslmode=require
+   
+   # For Supabase
+   DATABASE_URL=postgresql://postgres:[PASSWORD]@[PROJECT].supabase.co:5432/postgres?sslmode=require
+   ```
+   
+   **Important**: If your password contains special characters (@, #, %, etc.), 
+   you must URL-encode them (e.g., `@` becomes `%40`).
+   
+   **Auto-create tables**: To automatically create database tables on startup, add:
+   ```bash
+   DB_AUTO_CREATE=true
+   ```
+   ⚠️  **Warning**: Only set this in development. In production, use proper migrations.
+   
+   **Note**: The database is optional. The app works without it, but database features will be disabled.
+   
+   Test the connection:
+   ```bash
+   curl http://localhost:8000/api/db-test
+   ```
+
 ## Running the Application
 
 1. Start the FastAPI server:
@@ -89,14 +116,51 @@ Analyze uploaded CSV file
 ### `GET /api/health`
 Health check endpoint
 
+### `GET /api/db-test`
+Test database connection
+
+**Response**: 
+```json
+{"db_connected": true}
+```
+or
+```json
+{"db_connected": false, "error": "..."}
+```
+
+### `GET /api/db-status`
+Check database status - whether tables exist and basic query works
+
+**Response**:
+```json
+{
+  "tables_exist": true,
+  "user_count": 0,
+  "existing_tables": ["users", "strava_tokens", "activities"]
+}
+```
+or if tables don't exist:
+```json
+{
+  "tables_exist": false,
+  "error": "Missing tables...",
+  "existing_tables": [],
+  "required_tables": ["users", "strava_tokens", "activities"]
+}
+```
+
 ## Project Structure
 
 ```
 fastapi_dashboard/
 ├── backend/
 │   ├── main.py                 # FastAPI application
+│   ├── db.py                   # Database configuration (SQLAlchemy)
+│   ├── models.py               # SQLAlchemy ORM models
 │   ├── analysis_engine.py      # Workout analysis logic
-│   └── comparison_engine.py   # Multi-workout comparison
+│   ├── comparison_engine.py   # Multi-workout comparison
+│   ├── strava_oauth.py         # Strava OAuth integration
+│   └── strava_converter.py     # Strava data conversion
 ├── templates/
 │   └── index.html              # Frontend HTML with Chart.js
 ├── static/                     # Static files (if needed)
@@ -105,6 +169,7 @@ fastapi_dashboard/
 ├── README.md                    # This file
 ├── QUICKSTART.md                # Quick setup guide
 ├── COMPARISON_FEATURE.md        # Comparison feature docs
+├── ARCHITECTURE.md              # System architecture documentation
 └── TROUBLESHOOTING.md           # Troubleshooting guide
 ```
 

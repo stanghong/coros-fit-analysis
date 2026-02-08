@@ -22,6 +22,38 @@ sys.path.insert(0, str(Path(__file__).parent))
 from analysis_engine import analyze_workout
 from comparison_engine import analyze_multiple_workouts
 
+# Import database dependencies
+try:
+    from db import get_db, engine, Base, test_db_connection
+    DB_AVAILABLE = engine is not None
+    
+    # Import models to register them with Base.metadata (if models exist)
+    # This is optional - if models don't exist, Base.metadata will be empty
+    try:
+        from models import User, StravaToken, Activity  # noqa: F401
+        print("INFO: Database models imported")
+    except ImportError:
+        print("INFO: Database models not found - Base.metadata will be empty")
+    
+    # Auto-create database tables if DB_AUTO_CREATE is set to true
+    if DB_AVAILABLE:
+        db_auto_create = os.getenv("DB_AUTO_CREATE", "false").lower() in ("true", "1", "yes", "on")
+        if db_auto_create:
+            try:
+                Base.metadata.create_all(bind=engine)
+                print("INFO: Database tables auto-created")
+            except Exception as e:
+                print(f"WARNING: Failed to auto-create database tables: {e}")
+                print("Database features may not work correctly.")
+        else:
+            print("INFO: DB_AUTO_CREATE not set to true. Skipping automatic table creation.")
+            print("      Set DB_AUTO_CREATE=true to automatically create tables on startup.")
+    else:
+        print("WARNING: DATABASE_URL not set. Database features will be disabled.")
+except ImportError:
+    DB_AVAILABLE = False
+    print("WARNING: Database module not available. Database features disabled.")
+
 app = FastAPI(title="Swimming Workout Dashboard", version="1.0.0")
 
 # Add CORS middleware
@@ -71,16 +103,63 @@ async def root(request: Request):
 
 @app.get("/api/config")
 async def get_config():
-    """Get application configuration including feature flags."""
+    """
+    Get application configuration including feature flags and database status.
+    
+    Returns:
+        {
+            "strava_enabled": bool,
+            "db_connected": bool,
+            "strava_token_stored": bool,
+            "debug": {...}
+        }
+    """
     # Debug: Check raw env var value
     raw_value = os.getenv("STRAVA_ENABLED", "NOT_SET")
-    return {
+    
+    config = {
         "strava_enabled": STRAVA_ENABLED,
+        "db_connected": False,
+        "strava_token_stored": False,
         "debug": {
             "STRAVA_ENABLED_raw": raw_value,
             "STRAVA_ENABLED_parsed": STRAVA_ENABLED
         }
     }
+    
+    # Check database connection
+    if DB_AVAILABLE:
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT 1"))
+                result.fetchone()
+            config["db_connected"] = True
+        except Exception:
+            config["db_connected"] = False
+    
+    # Check if Strava token exists (for MVP, we'll check if any token exists)
+    # In a multi-user system, this would check for the current user's token
+    if config["db_connected"] and STRAVA_ENABLED:
+        try:
+            from db import get_db
+            from models import StravaToken
+            
+            # Get a database session
+            db_gen = get_db()
+            db = next(db_gen)
+            
+            try:
+                # Check if any Strava token exists
+                token_count = db.query(StravaToken).count()
+                config["strava_token_stored"] = token_count > 0
+            finally:
+                db.close()
+        except Exception:
+            # If we can't check, assume false
+            config["strava_token_stored"] = False
+    
+    return config
 
 
 # Import Strava OAuth routes if enabled
@@ -288,6 +367,179 @@ async def test_endpoint():
             "workout_type": "Endurance"
         }
     }
+
+
+@app.get("/api/db-test")
+async def db_test():
+    """
+    Test database connection.
+    
+    Returns:
+        {"db_connected": true} if connection successful
+        {"db_connected": false, "error": "..."} if connection fails
+    """
+    if not DB_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "db_connected": False,
+                "error": "Database not configured. Set DATABASE_URL environment variable."
+            }
+        )
+    
+    # Use test_db_connection function
+    success, error_msg = test_db_connection()
+    
+    if success:
+        return {"db_connected": True}
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "db_connected": False,
+                "error": error_msg
+            }
+        )
+
+
+@app.get("/api/db-status")
+async def db_status():
+    """
+    Check database status - whether tables exist and basic query works.
+    
+    Returns:
+        {
+            "tables_exist": bool,
+            "user_count": int (if tables exist),
+            "existing_tables": list (if available),
+            "error": str (if error occurred)
+        }
+    """
+    if not DB_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "tables_exist": False,
+                "error": "Database not configured. Set DATABASE_URL environment variable."
+            }
+        )
+    
+    try:
+        status = check_db_status()
+        status_code = 200 if status.get("tables_exist") else 503
+        return JSONResponse(status_code=status_code, content=status)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "tables_exist": False,
+                "error": f"Error checking database status: {str(e)}"
+            }
+        )
+
+
+@app.get("/api/activities")
+async def get_activities(athlete_id: Optional[int] = None, limit: int = 10):
+    """
+    Get cached activities from database for a given athlete.
+    
+    Args:
+        athlete_id: Strava athlete ID (query parameter, required)
+        limit: Maximum number of activities to return (default: 10, max: 100)
+        
+    Returns:
+        {
+            "count": int,
+            "activities": [
+                {
+                    "id": int,
+                    "name": str (from raw_json),
+                    "type": str,
+                    "start_date": str,
+                    "distance": float
+                }
+            ]
+        }
+    """
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="limit must be between 1 and 100"
+        )
+    
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Activity caching requires database."
+        )
+    
+    try:
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # Find user by athlete_id
+            user = db.query(User).filter(User.strava_athlete_id == athlete_id).first()
+            
+            if not user:
+                return {
+                    "count": 0,
+                    "activities": []
+                }
+            
+            # Query activities sorted by start_date desc
+            activities = db.query(Activity).filter(
+                Activity.user_id == user.id
+            ).order_by(
+                Activity.start_date.desc()
+            ).limit(limit).all()
+            
+            # Format activities for response
+            formatted_activities = []
+            for activity in activities:
+                # Get name from raw_json if available
+                name = "Untitled"
+                if activity.raw_json and isinstance(activity.raw_json, dict):
+                    name = activity.raw_json.get("name", "Untitled")
+                
+                # Format start_date
+                start_date_str = None
+                if activity.start_date:
+                    start_date_str = activity.start_date.isoformat()
+                elif activity.raw_json and isinstance(activity.raw_json, dict):
+                    start_date_str = activity.raw_json.get("start_date")
+                
+                formatted_activities.append({
+                    "id": activity.id,
+                    "name": name,
+                    "type": activity.type or "Unknown",
+                    "start_date": start_date_str,
+                    "distance": activity.distance_m or 0
+                })
+            
+            return {
+                "count": len(formatted_activities),
+                "activities": formatted_activities
+            }
+        
+        finally:
+            db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Failed to get activities: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving activities: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
