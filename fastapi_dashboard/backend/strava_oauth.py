@@ -397,60 +397,126 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
             # Get or create user for this athlete
             user = get_or_create_user(db, athlete_id)
             
-            # Fetch activities from Strava API
-            async with httpx.AsyncClient() as client:
-                activities_response = await client.get(
-                    "https://www.strava.com/api/v3/athlete/activities",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                    params={"per_page": limit, "page": 1}
+            # Use sync service with retry logic and rate limiting
+            use_sync_service = True
+            try:
+                from strava_sync import sync_activities
+                incremental_param = request.query_params.get("incremental", "false").lower() == "true"
+                
+                sync_result = await sync_activities(
+                    db=db,
+                    athlete_id=athlete_id,
+                    limit=limit,
+                    incremental=incremental_param,
+                    max_pages=1  # For import-latest, just get first page
                 )
-                activities_response.raise_for_status()
-                activities = activities_response.json()
+                
+                # Fetch activities from database that were just synced
+                from sqlalchemy import desc
+                from models import Activity
+                recent_activities = db.query(Activity).filter(
+                    Activity.user_id == user.id
+                ).order_by(desc(Activity.start_date)).limit(limit).all()
+                
+                activities = [act.raw_json for act in recent_activities if act.raw_json]
+                
+            except ImportError:
+                use_sync_service = False
             
-            # Always log first 5 activities for debugging (do NOT log tokens/secrets)
-            if activities:
-                print(f"INFO: First {min(5, len(activities))} activities from Strava (page 1):")
-                for i, activity in enumerate(activities[:5], 1):
-                    print(f"  {i}. name={activity.get('name')}, "
-                          f"start_date={activity.get('start_date')}, "
-                          f"type={activity.get('type')}, "
-                          f"sport_type={activity.get('sport_type')}, "
-                          f"private={activity.get('private')}")
+            if not use_sync_service:
+                # Fallback to old method if sync service not available
+                try:
+                    from strava_rate_limiter import check_rate_limit, record_api_call
+                    from strava_retry import retry_with_backoff
+                    
+                    # Check rate limit
+                    can_proceed, error_msg = check_rate_limit()
+                    if not can_proceed:
+                        raise HTTPException(status_code=429, detail=error_msg)
+                    
+                    # Fetch activities from Strava API with retry
+                    async with httpx.AsyncClient() as client:
+                        async def fetch_activities():
+                            record_api_call()
+                            return await client.get(
+                                "https://www.strava.com/api/v3/athlete/activities",
+                                headers={"Authorization": f"Bearer {access_token}"},
+                                params={"per_page": limit, "page": 1},
+                                timeout=30.0
+                            )
+                        
+                        activities_response = await retry_with_backoff(
+                            fetch_activities,
+                            description="Fetching Strava activities"
+                        )
+                        activities_response.raise_for_status()
+                        activities = activities_response.json()
+                        
+                        # Upsert activities (old method)
+                        for activity_data in activities:
+                            try:
+                                activity_payload = {
+                                    "id": activity_data.get("id"),
+                                    "sport_type": activity_data.get("sport_type"),
+                                    "type": activity_data.get("type"),
+                                    "start_date": activity_data.get("start_date"),
+                                    "distance": activity_data.get("distance"),
+                                    "moving_time": activity_data.get("moving_time"),
+                                    "elapsed_time": activity_data.get("elapsed_time"),
+                                    "average_heartrate": activity_data.get("average_heartrate"),
+                                    "max_heartrate": activity_data.get("max_heartrate"),
+                                    "total_elevation_gain": activity_data.get("total_elevation_gain"),
+                                    "raw_json": activity_data
+                                }
+                                upsert_activity(db, user.id, activity_payload)
+                            except Exception as e:
+                                print(f"WARNING: Failed to upsert activity {activity_data.get('id')}: {str(e)}")
+                                continue
+                except ImportError:
+                    # Ultimate fallback - no rate limiting or retry
+                    async with httpx.AsyncClient() as client:
+                        activities_response = await client.get(
+                            "https://www.strava.com/api/v3/athlete/activities",
+                            headers={"Authorization": f"Bearer {access_token}"},
+                            params={"per_page": limit, "page": 1}
+                        )
+                        activities_response.raise_for_status()
+                        activities = activities_response.json()
+                        
+                        # Upsert activities
+                        for activity_data in activities:
+                            try:
+                                activity_payload = {
+                                    "id": activity_data.get("id"),
+                                    "sport_type": activity_data.get("sport_type"),
+                                    "type": activity_data.get("type"),
+                                    "start_date": activity_data.get("start_date"),
+                                    "distance": activity_data.get("distance"),
+                                    "moving_time": activity_data.get("moving_time"),
+                                    "elapsed_time": activity_data.get("elapsed_time"),
+                                    "average_heartrate": activity_data.get("average_heartrate"),
+                                    "max_heartrate": activity_data.get("max_heartrate"),
+                                    "total_elevation_gain": activity_data.get("total_elevation_gain"),
+                                    "raw_json": activity_data
+                                }
+                                upsert_activity(db, user.id, activity_payload)
+                            except Exception as e:
+                                print(f"WARNING: Failed to upsert activity {activity_data.get('id')}: {str(e)}")
+                                continue
             
-            # Upsert each activity into database
+            # Format activities for response
+            # If using sync service, activities are already in DB, just format them
+            # Otherwise, they were just upserted in the fallback code above
             imported_activities = []
             for activity_data in activities:
-                try:
-                    # Prepare activity data with raw_json
-                    activity_payload = {
-                        "id": activity_data.get("id"),
-                        "sport_type": activity_data.get("sport_type"),
-                        "type": activity_data.get("type"),
-                        "start_date": activity_data.get("start_date"),
-                        "distance": activity_data.get("distance"),
-                        "moving_time": activity_data.get("moving_time"),
-                        "elapsed_time": activity_data.get("elapsed_time"),
-                        "average_heartrate": activity_data.get("average_heartrate"),
-                        "max_heartrate": activity_data.get("max_heartrate"),
-                        "total_elevation_gain": activity_data.get("total_elevation_gain"),
-                        "raw_json": activity_data  # Store full response
-                    }
-                    
-                    # Upsert activity
-                    activity = upsert_activity(db, user.id, activity_payload)
-                    
-                    # Format for response
-                    imported_activities.append({
-                        "id": activity.id,
-                        "name": activity_data.get("name", "Untitled"),
-                        "type": activity.type or activity_data.get("sport_type", "Unknown"),
-                        "start_date": activity_data.get("start_date"),
-                        "distance": activity.distance_m or 0
-                    })
-                except Exception as e:
-                    print(f"WARNING: Failed to upsert activity {activity_data.get('id')}: {str(e)}")
-                    # Continue with other activities
-                    continue
+                # Format for response (activities already in DB if using sync service)
+                imported_activities.append({
+                    "id": activity_data.get("id"),
+                    "name": activity_data.get("name", "Untitled"),
+                    "type": activity_data.get("sport_type") or activity_data.get("type", "Unknown"),
+                    "start_date": activity_data.get("start_date"),
+                    "distance": activity_data.get("distance", 0)
+                })
             
             # Filter for swimming activities with robust matching
             swim_activities = []
@@ -1080,3 +1146,93 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
             status_code=500,
             detail=f"Error analyzing Strava activity: {str(e)}\n\n{traceback.format_exc()}"
         )
+
+
+@router.post("/sync")
+async def sync_strava_activities(
+    athlete_id: Optional[int] = None,
+    incremental: bool = True,
+    limit: int = 30,
+    max_pages: int = 10
+):
+    """
+    Manually trigger sync of Strava activities with retry logic and rate limiting.
+    
+    Query parameters:
+        athlete_id: Strava athlete ID (required)
+        incremental: If true, only fetch activities newer than last sync (default: true)
+        limit: Number of activities per page (default: 30, max: 200)
+        max_pages: Maximum number of pages to fetch (default: 10)
+    """
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Sync requires database."
+        )
+    
+    try:
+        from strava_sync import sync_activities
+        
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            result = await sync_activities(
+                db=db,
+                athlete_id=athlete_id,
+                limit=min(limit, 200),
+                incremental=incremental,
+                max_pages=max_pages
+            )
+            
+            return {
+                "status": "success",
+                "synced_count": result["synced_count"],
+                "new_count": result["new_count"],
+                "updated_count": result["updated_count"],
+                "pages_fetched": result["pages_fetched"],
+                "rate_limit_status": result["rate_limit_status"]
+            }
+        finally:
+            db.close()
+            
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="Sync service not available"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sync failed: {str(e)}\n\n{traceback.format_exc()}"
+        )
+
+
+@router.get("/rate-limit-status")
+async def get_rate_limit_status_endpoint():
+    """
+    Get current Strava API rate limit status.
+    """
+    try:
+        from strava_rate_limiter import get_rate_limit_status
+        return get_rate_limit_status()
+    except ImportError:
+        return {
+            "error": "Rate limiter not available",
+            "requests_15min": 0,
+            "requests_day": 0,
+            "remaining_15min": 200,
+            "remaining_day": 2000
+        }

@@ -707,6 +707,37 @@ async def get_activities(athlete_id: Optional[int] = None, limit: int = 10):
         )
 
 
+# Background sync job (optional, controlled by env var)
+BACKGROUND_SYNC_ENABLED = os.getenv("BACKGROUND_SYNC_ENABLED", "false").lower() in ("true", "1", "yes", "on")
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background sync job if enabled."""
+    if BACKGROUND_SYNC_ENABLED and STRAVA_ENABLED and DB_AVAILABLE:
+        try:
+            from strava_background_sync import start_background_sync
+            start_background_sync()
+            print("INFO: Background sync job started")
+        except ImportError:
+            print("WARNING: Background sync module not available")
+        except Exception as e:
+            print(f"WARNING: Failed to start background sync: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background sync job."""
+    if BACKGROUND_SYNC_ENABLED:
+        try:
+            from strava_background_sync import stop_background_sync
+            stop_background_sync()
+            print("INFO: Background sync job stopped")
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"WARNING: Error stopping background sync: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
     import os
