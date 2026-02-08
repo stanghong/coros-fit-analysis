@@ -806,7 +806,7 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
         db_gen = get_db()
         db = next(db_gen)
         try:
-            access_token = ensure_valid_access_token(db, athlete_id)
+            access_token = await ensure_valid_access_token(db, athlete_id)
             if not access_token:
                 raise HTTPException(
                     status_code=401,
@@ -945,7 +945,7 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
         db_gen = get_db()
         db = next(db_gen)
         try:
-            access_token = ensure_valid_access_token(db, athlete_id)
+            access_token = await ensure_valid_access_token(db, athlete_id)
             if not access_token:
                 raise HTTPException(
                     status_code=401,

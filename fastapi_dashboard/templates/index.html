@@ -2269,13 +2269,23 @@
             document.getElementById('error').classList.remove('show');
             
             try {
+                if (!activityId || isNaN(activityId)) {
+                    throw new Error('Invalid activity ID');
+                }
+                
                 const response = await fetch(`/strava/analyze-activity/${activityId}?athlete_id=${currentAthleteId}`, {
                     method: 'POST'
                 });
                 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Failed to analyze activity');
+                    let errorDetail = 'Failed to analyze activity';
+                    try {
+                        const error = await response.json();
+                        errorDetail = error.detail || errorDetail;
+                    } catch (e) {
+                        errorDetail = `Server error: ${response.status} ${response.statusText}`;
+                    }
+                    throw new Error(errorDetail);
                 }
                 
                 const data = await response.json();
@@ -2310,7 +2320,11 @@
             }
             
             const activityId = parseInt(checkboxes[0].dataset.activityId);
-            const activityName = checkboxes[0].closest('div').querySelector('strong').textContent;
+            if (isNaN(activityId)) {
+                showError('Invalid activity ID. Please try again.');
+                return;
+            }
+            const activityName = checkboxes[0].closest('div').querySelector('strong')?.textContent || 'Activity';
             await analyzeStravaActivity(activityId, activityName);
         }
         
@@ -2342,7 +2356,9 @@
             }
             
             const checkboxes = document.querySelectorAll('.strava-activity-checkbox:checked');
-            const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.activityId));
+            const selectedIds = Array.from(checkboxes)
+                .map(cb => parseInt(cb.dataset.activityId))
+                .filter(id => !isNaN(id));
             
             if (selectedIds.length < 2) {
                 showError('Please select at least 2 activities to compare');
