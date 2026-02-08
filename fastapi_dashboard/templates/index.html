@@ -2318,11 +2318,26 @@
         
         // Load config on page load
         window.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded - Initial stravaEnabled:', stravaEnabled);
+            
             // Update UI immediately based on server-side value
             updateUIForStrava();
             
+            // Force show tab if enabled (double-check)
+            if (stravaEnabled) {
+                const stravaTab = document.getElementById('tabStrava');
+                if (stravaTab) {
+                    stravaTab.style.display = 'inline-block';
+                    stravaTab.style.visibility = 'visible';
+                    console.log('Forced Strava tab to be visible');
+                } else {
+                    console.error('Strava tab button not found in DOM!');
+                }
+            }
+            
             // Then load config from API and update again
             loadConfig().then(() => {
+                console.log('Config loaded - stravaEnabled:', stravaEnabled);
                 updateUIForStrava();
                 checkStravaStatus();
             });
