@@ -678,7 +678,7 @@
         <div style="display: flex; gap: 10px; padding: 20px; background: #f8f9ff; border-bottom: 2px solid #e0e0e0;">
             <button class="tab-btn active" onclick="switchTab('single')" id="tabSingle">Single Workout</button>
             <button class="tab-btn" onclick="switchTab('compare')" id="tabCompare">Compare Workouts</button>
-            <button class="tab-btn" onclick="switchTab('strava')" id="tabStrava" style="display: none;">Connect Strava</button>
+            <button class="tab-btn" onclick="switchTab('strava')" id="tabStrava">Connect Strava</button>
         </div>
         
         <!-- Single Workout Section -->
@@ -993,6 +993,15 @@
         // Feature flags
         let stravaEnabled = {{ 'true' if strava_enabled else 'false' }};
         
+        // Immediately show/hide Strava tab based on server-side value (runs before DOMContentLoaded)
+        document.addEventListener('DOMContentLoaded', function() {
+            const stravaTab = document.getElementById('tabStrava');
+            if (stravaTab) {
+                stravaTab.style.display = stravaEnabled ? 'inline-block' : 'none';
+                console.log('Initial Strava tab visibility (server-side):', stravaEnabled, 'display:', stravaTab.style.display);
+            }
+        }, { once: true });
+        
         // Error handler - defined early for inline handlers
         function showError(message) {
             const errorDiv = document.getElementById('error');
@@ -1049,7 +1058,10 @@
             const stravaSection = document.getElementById('stravaSection');
             
             if (stravaTab) {
-                stravaTab.style.display = stravaEnabled ? 'block' : 'none';
+                stravaTab.style.display = stravaEnabled ? 'inline-block' : 'none';
+                console.log('Strava tab visibility updated:', stravaEnabled, 'display:', stravaTab.style.display);
+            } else {
+                console.warn('Strava tab button not found in DOM');
             }
             if (stravaSection) {
                 stravaSection.style.display = stravaEnabled ? 'block' : 'none';
@@ -1996,19 +2008,6 @@
                 updateUIForStrava();
             } catch (error) {
                 console.error('Failed to load config:', error);
-            }
-        }
-        
-        // Update UI based on Strava enabled status
-        function updateUIForStrava() {
-            const stravaTab = document.getElementById('tabStrava');
-            const stravaSection = document.getElementById('stravaSection');
-            
-            if (stravaTab) {
-                stravaTab.style.display = stravaEnabled ? 'block' : 'none';
-            }
-            if (stravaSection) {
-                stravaSection.style.display = stravaEnabled ? 'block' : 'none';
             }
         }
         
