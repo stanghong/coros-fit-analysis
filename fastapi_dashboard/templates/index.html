@@ -708,6 +708,25 @@
                         <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
                             Select 1 activity for single analysis, or 2-20 activities to compare
                         </p>
+                        <!-- Sport Filter Tabs -->
+                        <div id="sportFilterTabs" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                            <button class="sport-filter-btn active" data-sport="all" onclick="filterActivitiesBySport('all')" 
+                                    style="padding: 8px 20px; border: 2px solid #667eea; background: #667eea; color: white; border-radius: 8px; cursor: pointer; font-size: 0.9em;">
+                                All
+                            </button>
+                            <button class="sport-filter-btn" data-sport="swim" onclick="filterActivitiesBySport('swim')"
+                                    style="padding: 8px 20px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; cursor: pointer; font-size: 0.9em;">
+                                🏊 Swim
+                            </button>
+                            <button class="sport-filter-btn" data-sport="run" onclick="filterActivitiesBySport('run')"
+                                    style="padding: 8px 20px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; cursor: pointer; font-size: 0.9em;">
+                                🏃 Run
+                            </button>
+                            <button class="sport-filter-btn" data-sport="bike" onclick="filterActivitiesBySport('bike')"
+                                    style="padding: 8px 20px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; cursor: pointer; font-size: 0.9em;">
+                                🚴 Bike
+                            </button>
+                        </div>
                         <div id="stravaActivitiesContainer" style="max-height: 400px; overflow-y: auto;"></div>
                         <div style="margin-top: 15px;">
                             <button class="upload-btn" id="stravaAnalyzeSelectedBtn" onclick="analyzeSelectedStravaActivities()" 
@@ -966,6 +985,8 @@
         // Feature flags
         let stravaEnabled = {{ 'true' if strava_enabled else 'false' }};
         let currentAthleteId = null; // Store athlete_id for API calls
+        let allStravaActivities = []; // Store all activities for filtering
+        let currentSportFilter = 'all'; // Current sport filter
         
         // Immediately show/hide Strava tab based on server-side value (runs before DOMContentLoaded)
         document.addEventListener('DOMContentLoaded', function() {
@@ -1970,81 +1991,28 @@
                 const data = await response.json();
                 
                 if (data.activities && data.activities.length > 0) {
-                    // Use swim_activities if provided, otherwise filter
-                    let swimActivities = data.swim_activities || data.activities.filter(a => a.is_swim);
+                    // Store all activities globally for filtering
+                    allStravaActivities = data.activities.map(activity => {
+                        // Extract sport_type from activity data
+                        const sportType = activity.sport_type || activity.type || 'Unknown';
+                        return {
+                            ...activity,
+                            sport_type: sportType,
+                            type: activity.type || sportType
+                        };
+                    });
                     
-                    // If no swim_activities provided, do client-side filtering with robust matching
-                    if (!data.swim_activities || data.swim_activities.length === 0) {
-                        swimActivities = data.activities.filter(a => {
-                            const type = (a.type || "").toLowerCase();
-                            return type.includes("swim") || type === "swim" || type === "openwaterswim";
-                        });
-                    }
+                    // Display activities based on current filter
+                    displayFilteredActivities();
                     
-                    if (swimActivities.length === 0) {
-                        const totalScanned = data.count || data.activities.length;
-                        const pagesFetched = data.pages_fetched || 1;
-                        let diagnosticMsg = '';
-                        if (data.diagnostics) {
-                            const sportTypes = data.diagnostics.distinct_sport_types || [];
-                            const types = data.diagnostics.distinct_types || [];
-                            diagnosticMsg = `<br><small style="color: #999;">Sport types seen: ${sportTypes.join(', ') || 'none'}<br>Types seen: ${types.join(', ') || 'none'}</small>`;
-                        }
-                        statusDiv.innerHTML = `
-                            <p style="color: #f39c12; font-weight: bold;">⚠ No swimming activities found</p>
-                            <p style="font-size: 0.9em; color: #666; margin-top: 10px;">
-                                Scanned ${totalScanned} activities from ${pagesFetched} page(s), but none are swimming workouts.
-                                ${data.activities && data.activities.length > 0 ? 
-                                    `<br>Activity types found: ${data.activities.slice(0, 5).map(a => a.type || 'unknown').join(', ')}` : 
-                                    ''}
-                                ${diagnosticMsg}
-                            </p>
-                        `;
-                    } else {
-                        statusDiv.innerHTML = `
-                            <p style="color: #2ecc71; font-weight: bold;">✓ Found ${swimActivities.length} swimming activities</p>
-                        `;
-                        
-                        // Display activities list
-                        if (activitiesContainer) {
-                            activitiesContainer.innerHTML = '';
-                            swimActivities.forEach(activity => {
-                                const activityDiv = document.createElement('div');
-                                activityDiv.style.cssText = 'padding: 15px; margin: 10px 0; background: #f8f9ff; border-radius: 8px; border-left: 4px solid #667eea; cursor: pointer;';
-                                activityDiv.onmouseover = function() { this.style.background = '#e8f0ff'; };
-                                activityDiv.onmouseout = function() { this.style.background = '#f8f9ff'; };
-                                
-                                const distanceKm = (activity.distance / 1000).toFixed(2);
-                                const durationMin = Math.floor(activity.duration / 60);
-                                const date = new Date(activity.start_date).toLocaleDateString();
-                                const safeName = (activity.name || 'Swimming Workout').replace(/'/g, "\\'");
-                                
-                                activityDiv.innerHTML = `
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <div style="display: flex; align-items: center; gap: 10px;">
-                                            <input type="checkbox" class="strava-activity-checkbox" 
-                                                   data-activity-id="${activity.id}" 
-                                                   onchange="updateStravaActionButtons()"
-                                                   style="width: 20px; height: 20px; cursor: pointer;">
-                                            <div>
-                                                <strong style="color: #667eea;">${safeName}</strong>
-                                                <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
-                                                    ${distanceKm} km • ${durationMin} min • ${date}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <button class="upload-btn" style="padding: 8px 20px; font-size: 0.9em;" 
-                                                onclick="analyzeStravaActivity(${activity.id}, '${safeName}')">
-                                            Analyze
-                                        </button>
-                                    </div>
-                                `;
-                                activitiesContainer.appendChild(activityDiv);
-                            });
-                        }
-                        
-                        if (activitiesList) activitiesList.style.display = 'block';
-                    }
+                    const totalCount = allStravaActivities.length;
+                    statusDiv.innerHTML = `
+                        <p style="color: #2ecc71; font-weight: bold;">✓ Found ${totalCount} activities</p>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<p style="color: #f39c12;">No activities found</p>';
+                } else {
+                    if (activitiesList) activitiesList.style.display = 'block';
                 } else {
                     statusDiv.innerHTML = '<p style="color: #f39c12;">No activities found</p>';
                 }
@@ -2074,6 +2042,112 @@
                 importBtn.disabled = false;
                 importBtn.textContent = 'Load Activities';
             }
+        }
+        
+        // Filter activities by sport type
+        function filterActivitiesBySport(sport) {
+            currentSportFilter = sport;
+            
+            // Update button styles
+            const filterButtons = document.querySelectorAll('.sport-filter-btn');
+            filterButtons.forEach(btn => {
+                const btnSport = btn.getAttribute('data-sport');
+                if (btnSport === sport) {
+                    btn.style.background = '#667eea';
+                    btn.style.color = 'white';
+                    btn.classList.add('active');
+                } else {
+                    btn.style.background = 'white';
+                    btn.style.color = '#667eea';
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // Re-display filtered activities
+            displayFilteredActivities();
+        }
+        
+        // Display activities filtered by current sport filter
+        function displayFilteredActivities() {
+            const activitiesContainer = document.getElementById('stravaActivitiesContainer');
+            if (!activitiesContainer) return;
+            
+            // Filter activities based on current filter
+            let filteredActivities = [];
+            
+            if (currentSportFilter === 'all') {
+                filteredActivities = allStravaActivities;
+            } else if (currentSportFilter === 'swim') {
+                filteredActivities = allStravaActivities.filter(activity => {
+                    const sportType = (activity.sport_type || activity.type || '').toLowerCase();
+                    return sportType === 'swim' || sportType === 'openwaterswim' || 
+                           sportType.includes('swim');
+                });
+            } else if (currentSportFilter === 'run') {
+                filteredActivities = allStravaActivities.filter(activity => {
+                    const sportType = (activity.sport_type || activity.type || '').toLowerCase();
+                    return sportType === 'run' || sportType.includes('run');
+                });
+            } else if (currentSportFilter === 'bike') {
+                filteredActivities = allStravaActivities.filter(activity => {
+                    const sportType = (activity.sport_type || activity.type || '').toLowerCase();
+                    return sportType === 'ride' || sportType === 'bike' || 
+                           sportType.includes('ride') || sportType.includes('bike') ||
+                           sportType.includes('cycle');
+                });
+            }
+            
+            // Clear container
+            activitiesContainer.innerHTML = '';
+            
+            if (filteredActivities.length === 0) {
+                activitiesContainer.innerHTML = `
+                    <p style="text-align: center; color: #999; padding: 20px;">
+                        No ${currentSportFilter === 'all' ? '' : currentSportFilter} activities found.
+                    </p>
+                `;
+                return;
+            }
+            
+            // Display filtered activities
+            filteredActivities.forEach(activity => {
+                const activityDiv = document.createElement('div');
+                activityDiv.style.cssText = 'padding: 15px; margin: 10px 0; background: #f8f9ff; border-radius: 8px; border-left: 4px solid #667eea; cursor: pointer;';
+                activityDiv.onmouseover = function() { this.style.background = '#e8f0ff'; };
+                activityDiv.onmouseout = function() { this.style.background = '#f8f9ff'; };
+                
+                const distanceKm = activity.distance ? (activity.distance / 1000).toFixed(2) : '0.00';
+                const duration = activity.moving_time || activity.elapsed_time || 0;
+                const durationMin = Math.floor(duration / 60);
+                const date = activity.start_date ? new Date(activity.start_date).toLocaleDateString() : 'Unknown date';
+                const safeName = (activity.name || 'Workout').replace(/'/g, "\\'");
+                const sportType = activity.sport_type || activity.type || 'Unknown';
+                
+                activityDiv.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" class="strava-activity-checkbox" 
+                                   data-activity-id="${activity.id}" 
+                                   onchange="updateStravaActionButtons()"
+                                   style="width: 20px; height: 20px; cursor: pointer;">
+                            <div>
+                                <strong style="color: #667eea;">${safeName}</strong>
+                                <p style="margin: 5px 0; color: #666; font-size: 0.9em;">
+                                    ${distanceKm} km • ${durationMin} min • ${date} • <span style="color: #999;">${sportType}</span>
+                                </p>
+                            </div>
+                        </div>
+                        <button class="upload-btn" style="padding: 8px 20px; font-size: 0.9em;" 
+                                onclick="analyzeStravaActivity(${activity.id}, '${safeName}')">
+                            Analyze
+                        </button>
+                    </div>
+                `;
+                activitiesContainer.appendChild(activityDiv);
+            });
+            
+            // Update action buttons
+            updateStravaActionButtons();
         }
         
         // Update action buttons based on selected activities
