@@ -52,7 +52,7 @@ pip install -r requirements.txt
    ```
    ⚠️  **Warning**: Only set this in development. In production, use proper migrations.
    
-   **Note**: The database is optional. The app works without it, but database features will be disabled.
+   **Note**: Database is required for Strava integration features (OAuth token storage, activity caching). CSV upload and analysis work without a database.
    
    Test the connection:
    ```bash
@@ -166,11 +166,15 @@ fastapi_dashboard/
 ├── backend/
 │   ├── main.py                 # FastAPI application
 │   ├── db.py                   # Database configuration (SQLAlchemy)
-│   ├── models.py               # SQLAlchemy ORM models
+│   ├── models.py               # SQLAlchemy ORM models (User, StravaToken, Activity)
+│   ├── strava_store.py         # Database operations for Strava (tokens, activities)
 │   ├── analysis_engine.py      # Workout analysis logic
 │   ├── comparison_engine.py   # Multi-workout comparison
 │   ├── strava_oauth.py         # Strava OAuth integration
 │   └── strava_converter.py     # Strava data conversion
+├── migrations/
+│   ├── 001_add_users_updated_at.sql  # Database migration scripts
+│   └── README.md               # Migration instructions
 ├── templates/
 │   └── index.html              # Frontend HTML with Chart.js
 ├── static/                     # Static files (if needed)

@@ -36,24 +36,27 @@ This document describes the current architecture of the Swimming Workout Dashboa
 │  │  • GET  /strava/login       → Redirect to Strava OAuth   │  │
 │  │  • GET  /strava/callback    → Handle OAuth callback       │  │
 │  │  • GET  /strava/status      → Check connection status     │  │
+│  │  • GET  /strava/token-check → Check/refresh token         │  │
 │  │                                                             │  │
-│  │  Token Storage: In-memory dict (strava_tokens)             │  │
-│  │  • Access token                                           │  │
-│  │  • Refresh token                                           │  │
+│  │  Token Storage: PostgreSQL database (strava_tokens)      │  │
+│  │  • Access token (encrypted in DB)                         │  │
+│  │  • Refresh token (encrypted in DB)                        │  │
 │  │  • Expires at timestamp                                    │  │
-│  │  • Athlete info                                            │  │
-│  │                                                             │  │
-│  │  ⚠️  TODO: Move to database for production                │  │
+│  │  • Auto-refresh via ensure_valid_access_token()           │  │
+│  │  • Athlete info persisted (username, firstname, lastname)  │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                            │                                     │
 │                            ▼                                     │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                    INGEST LAYER                            │  │
 │  │  • GET  /strava/import-latest → Fetch activities (manual) │  │
+│  │  • GET  /api/activities      → Get cached activities      │  │
 │  │                                                             │  │
 │  │  Current: Manual trigger via UI button                      │  │
 │  │  • Fetches last 30 activities from Strava API              │  │
 │  │  • Filters for swimming activities only                   │  │
+│  │  • Upserts activities to database (activities table)       │  │
+│  │  • Returns cached activities from DB                       │  │
 │  │                                                             │  │
 │  │  ⚠️  TODO: Add webhook or polling for automatic sync       │  │
 │  └──────────────────────────────────────────────────────────┘  │
@@ -89,31 +92,52 @@ This document describes the current architecture of the Swimming Workout Dashboa
 │                            ▼                                     │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                    STORE LAYER                             │  │
-│  │  Current: In-memory storage                                │  │
-│  │  • strava_tokens: Dict[str, Dict]                        │  │
-│  │    - Key: "default_user" (single-user demo)               │  │
-│  │    - Value: {access_token, refresh_token, expires_at, ...} │  │
+│  │  Database: PostgreSQL (Supabase) with SQLAlchemy ORM       │  │
 │  │                                                             │  │
-│  │  ⚠️  TODO: Database tables needed:                       │  │
-│  │     • users (id, email, created_at)                        │  │
-│  │     • strava_tokens (user_id, access_token, refresh_token,│  │
-│  │       expires_at, athlete_info)                            │  │
-│  │     • activities (id, user_id, strava_activity_id,        │  │
-│  │       normalized_data, analyzed_data, created_at)         │  │
+│  │  Tables:                                                   │  │
+│  │  • users                                                    │  │
+│  │    - id (PK), strava_athlete_id (unique)                   │  │
+│  │    - strava_username, strava_firstname, strava_lastname   │  │
+│  │    - created_at, updated_at                                │  │
+│  │                                                             │  │
+│  │  • strava_tokens                                           │  │
+│  │    - user_id (PK, FK), access_token, refresh_token         │  │
+│  │    - expires_at (unix timestamp), scope                    │  │
+│  │    - updated_at                                            │  │
+│  │                                                             │  │
+│  │  • activities                                               │  │
+│  │    - id (PK = Strava activity ID), user_id (FK)           │  │
+│  │    - type, start_date, distance_m, moving_time_s           │  │
+│  │    - average_heartrate, max_heartrate                      │  │
+│  │    - raw_json (full Strava API response)                   │  │
+│  │    - fetched_at                                            │  │
+│  │                                                             │  │
+│  │  Functions (strava_store.py):                              │  │
+│  │  • get_or_create_user() → Upsert user by athlete_id        │  │
+│  │  • upsert_strava_token() → Store/update tokens             │  │
+│  │  • ensure_valid_access_token() → Auto-refresh if expired   │  │
+│  │  • upsert_activity() → Cache activities                    │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                            │                                     │
 │                            ▼                                     │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                    SYNC LAYER                              │  │
-│  │  Current: On-demand fetch (no sync)                       │  │
+│  │  Current: On-demand fetch with database caching           │  │
 │  │  • User clicks "Load Activities" → Fetch from Strava       │  │
-│  │  • User clicks "Analyze" → Fetch streams                 │  │
+│  │    → Upsert to database (idempotent)                       │  │
+│  │  • User clicks "Analyze" → Fetch streams from Strava      │  │
+│  │  • Token refresh: Auto-refreshes expired tokens            │  │
+│  │    → Updates database with new tokens                     │  │
 │  │                                                             │  │
-│  │  ⚠️  TODO: Implement sync layer:                           │  │
-│  │     • Idempotent upserts (check if activity exists)        │  │
-│  │     • Retry logic for failed API calls                     │  │
-│  │     • Background job to sync new activities                │  │
+│  │  Implemented:                                              │  │
+│  │  • Idempotent upserts (upsert_activity checks by ID)        │  │
+│  │  • Token refresh with DB persistence                       │  │
+│  │                                                             │  │
+│  │  ⚠️  TODO:                                                  │  │
+│  │     • Retry logic with exponential backoff                 │  │
+│  │     • Background job to sync new activities                 │  │
 │  │     • Handle rate limits (200/15min, 2000/day)            │  │
+│  │     • Conflict resolution (activity updated on Strava)     │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                             │
@@ -121,13 +145,13 @@ This document describes the current architecture of the Swimming Workout Dashboa
 ┌─────────────────────────────────────────────────────────────────┐
 │                    EXTERNAL SERVICES                            │
 │                                                                  │
-│  ┌──────────────────┐         ┌──────────────────┐             │
-│  │   STRAVA API     │         │   FILE UPLOAD    │             │
-│  │                  │         │                  │             │
-│  │  • OAuth 2.0     │         │  • CSV files     │             │
-│  │  • Activities    │         │  • Coros format  │             │
-│  │  • Streams      │         │                  │             │
-│  └──────────────────┘         └──────────────────┘             │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐│
+│  │   STRAVA API     │  │   FILE UPLOAD    │  │  SUPABASE DB  ││
+│  │                  │  │                  │  │              ││
+│  │  • OAuth 2.0     │  │  • CSV files     │  │  • PostgreSQL ││
+│  │  • Activities    │  │  • Coros format  │  │  • Connection ││
+│  │  • Streams      │  │                  │  │    Pooler     ││
+│  └──────────────────┘  └──────────────────┘  └──────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -139,18 +163,20 @@ This document describes the current architecture of the Swimming Workout Dashboa
 
 **What exists:**
 - OAuth 2.0 flow: `/strava/login` redirects to Strava, `/strava/callback` handles the response
-- Token storage in-memory dictionary (`strava_tokens`)
-- Basic token refresh logic (checks expiration, refreshes if needed)
-- Single-user demo mode (hardcoded `"default_user"`)
+- Token storage in PostgreSQL database (`strava_tokens` table)
+- Automatic token refresh via `ensure_valid_access_token()` (checks expiration, refreshes if needed, updates DB)
+- Athlete info persistence (username, firstname, lastname stored in `users` table)
+- Token check endpoint: `/strava/token-check` for debugging
+- Debug endpoint: `/strava/debug/strava-athlete` to verify athlete identity
 
 **What's missing:**
-- Database-backed token storage (currently lost on server restart)
-- Multi-user support (session management)
-- Secure token encryption at rest
+- Multi-user support (session management, user isolation)
+- Secure token encryption at rest (tokens stored as plain text in DB)
 - Token rotation and revocation handling
+- User authentication/authorization system
 
 **2-3 sentence summary:**
-Handles Strava OAuth 2.0 authentication flow. Users click "Connect Strava" which redirects to Strava for authorization, then returns to `/strava/callback` where we exchange the code for access/refresh tokens. Tokens are currently stored in-memory (lost on restart) and need to be moved to a database for production.
+Handles Strava OAuth 2.0 authentication flow. Users click "Connect Strava" which redirects to Strava for authorization, then returns to `/strava/callback` where we exchange the code for access/refresh tokens. Tokens are persisted in PostgreSQL database (survives server restarts) and automatically refreshed when expired. Athlete identity (username, name) is fetched from Strava API and stored in the database.
 
 ---
 
@@ -159,8 +185,11 @@ Handles Strava OAuth 2.0 authentication flow. Users click "Connect Strava" which
 **What exists:**
 - Manual trigger: User clicks "Load Activities" button
 - Fetches last 30 activities from Strava API (`/athlete/activities`)
-- Filters for swimming activities only
-- Displays list in UI for user selection
+- Filters for swimming activities (robust case-insensitive matching)
+- Upserts activities to database (`activities` table) for caching
+- Returns cached activities from database via `/api/activities`
+- Supports pagination (per_page up to 200)
+- Logs first 5 activities for debugging
 
 **What's missing:**
 - Automatic sync (webhook or polling)
@@ -169,7 +198,7 @@ Handles Strava OAuth 2.0 authentication flow. Users click "Connect Strava" which
 - Incremental sync (only fetch new activities since last sync)
 
 **2-3 sentence summary:**
-Currently manual - user clicks "Load Activities" which calls `/strava/import-latest` to fetch recent activities from Strava API. Returns list of swimming activities for user to select. No automatic sync exists yet - needs webhook or polling mechanism for production.
+User clicks "Load Activities" which calls `/strava/import-latest` to fetch recent activities from Strava API, filters for swimming activities, and upserts them to the database for caching. Activities are stored with full Strava API response in `raw_json` field. Cached activities can be retrieved via `/api/activities` endpoint. No automatic sync exists yet - needs webhook or polling mechanism for production.
 
 ---
 
@@ -199,18 +228,29 @@ Converts Strava API responses (activity summary + time-series streams) into our 
 ### 4. Store Layer
 
 **What exists:**
-- In-memory Python dictionary for tokens: `strava_tokens["default_user"]`
-- No database - all data is ephemeral
-- Activities are fetched on-demand, not stored
+- PostgreSQL database (Supabase) with SQLAlchemy ORM
+- Three tables: `users`, `strava_tokens`, `activities`
+- Token persistence in database (survives server restarts)
+- Activity caching in database (avoid re-fetching from Strava)
+- Database helper functions in `strava_store.py`:
+  - `get_or_create_user()` - Upsert user by athlete_id
+  - `upsert_strava_token()` - Store/update OAuth tokens
+  - `ensure_valid_access_token()` - Auto-refresh expired tokens
+  - `upsert_activity()` - Cache activities with idempotent upserts
+  - `get_activities_for_athlete_from_db()` - Retrieve cached activities
+- Database connection pooling (pool_size=5, max_overflow=10)
+- Auto-table creation via `DB_AUTO_CREATE=true` env var
+- Migration scripts in `migrations/` directory
 
 **What's missing:**
-- Database schema (users, tokens, activities tables)
-- Persistent storage for tokens (survives server restarts)
-- Activity caching (avoid re-fetching from Strava)
-- User session management
+- Multi-user session management
+- Token encryption at rest
+- Database migrations tool (Alembic)
+- Activity data retention policy
+- Database backup strategy
 
 **2-3 sentence summary:**
-Currently no persistent storage - tokens stored in-memory dictionary, activities fetched on-demand and not cached. This means tokens are lost on server restart and we re-fetch activities every time. Need database tables for users, tokens, and activities to make this production-ready.
+PostgreSQL database (Supabase) stores users, OAuth tokens, and cached activities. Tokens persist across server restarts and are automatically refreshed when expired. Activities are cached in the database with full Strava API response in `raw_json` field, avoiding repeated API calls. Database operations use SQLAlchemy ORM with connection pooling for efficiency.
 
 ---
 
@@ -219,17 +259,20 @@ Currently no persistent storage - tokens stored in-memory dictionary, activities
 **What exists:**
 - On-demand fetching when user clicks "Load Activities"
 - On-demand stream fetching when user clicks "Analyze"
+- Idempotent upserts via `upsert_activity()` (checks if activity exists by ID)
+- Token refresh with database persistence (auto-updates DB on refresh)
 - Basic error handling (shows error message if API call fails)
+- Activity caching in database (reduces Strava API calls)
 
 **What's missing:**
-- Idempotent upserts (check if activity already exists before storing)
 - Retry logic with exponential backoff
 - Background sync job (periodic polling or webhook processing)
 - Rate limit handling (Strava: 200/15min, 2000/day)
 - Conflict resolution (what if activity updated on Strava?)
+- Incremental sync (only fetch new activities since last sync)
 
 **2-3 sentence summary:**
-No automated sync - everything is on-demand when user clicks buttons. No idempotency checks, retry logic, or background jobs. Need to implement proper sync layer with idempotent upserts, retry logic, and rate limit handling for production use.
+On-demand sync with database caching. When user clicks "Load Activities", activities are fetched from Strava API and upserted to database (idempotent - won't create duplicates). Tokens are automatically refreshed when expired and persisted to database. No retry logic, background jobs, or rate limit handling yet - needs these for production scale.
 
 ---
 
@@ -294,7 +337,11 @@ Strava redirects to /strava/callback?code=...
   ↓
 Backend: Exchange code for tokens (POST to Strava)
   ↓
-Backend: Store tokens in-memory (strava_tokens dict)
+Backend: Fetch athlete info from Strava API (/api/v3/athlete)
+  ↓
+Backend: get_or_create_user() → Upsert user in database
+  ↓
+Backend: upsert_strava_token() → Store tokens in database
   ↓
 Backend: Redirect to dashboard with ?strava_connected=true
   ↓
@@ -307,67 +354,77 @@ Frontend: Shows "Import Latest Activity" button
 
 ### Production Readiness Gaps:
 
-1. **No Database**
-   - Tokens lost on restart
-   - No activity caching
-   - No user management
-
-2. **No Automatic Sync**
+1. **No Automatic Sync**
    - Manual user action required
    - No background jobs
    - No webhook support
 
-3. **Single User Only**
-   - Hardcoded `"default_user"`
+2. **Single User Only**
    - No session management
    - No user isolation
+   - Athlete ID used as user identifier
 
-4. **No Error Recovery**
-   - No retry logic
-   - No rate limit handling
-   - No idempotency
+3. **Limited Error Recovery**
+   - No retry logic with exponential backoff
+   - No rate limit handling (Strava: 200/15min, 2000/day)
+   - Basic error messages only
 
-5. **Security Concerns**
-   - Tokens in plain memory
-   - No encryption
+4. **Security Concerns**
+   - Tokens stored as plain text in database (no encryption)
    - No token rotation
+   - No user authentication/authorization
+
+5. **Database**
+   - ✅ Database implemented (PostgreSQL)
+   - ✅ Token persistence working
+   - ✅ Activity caching working
+   - ⚠️  No migration tool (Alembic)
+   - ⚠️  Manual SQL migrations only
 
 ---
 
 ## Next Steps (Before Adding Features)
 
-### Priority 1: Database Layer
-- [ ] Design schema (users, tokens, activities)
-- [ ] Choose database (PostgreSQL recommended)
-- [ ] Implement token storage
-- [ ] Add activity caching
+### Priority 1: Sync Layer Improvements
+- [x] Implement idempotent upserts ✅
+- [ ] Add retry logic with exponential backoff
+- [ ] Handle rate limits (Strava: 200/15min, 2000/day)
+- [ ] Background sync job (periodic polling or webhook)
+- [ ] Incremental sync (only fetch new activities)
 
-### Priority 2: Sync Layer
-- [ ] Implement idempotent upserts
-- [ ] Add retry logic with backoff
-- [ ] Handle rate limits
-- [ ] Background sync job
-
-### Priority 3: Multi-User Support
-- [ ] User authentication
+### Priority 2: Multi-User Support
+- [ ] User authentication system
 - [ ] Session management
 - [ ] User-scoped data access
+- [ ] User isolation (prevent cross-user data access)
+
+### Priority 3: Database Improvements
+- [x] Database schema implemented ✅
+- [x] Token storage working ✅
+- [x] Activity caching working ✅
+- [ ] Add Alembic for migrations
+- [ ] Token encryption at rest
+- [ ] Database backup strategy
 
 ### Priority 4: Production Hardening
-- [ ] Error monitoring
-- [ ] API documentation
-- [ ] Rate limiting
+- [ ] Error monitoring (Sentry, etc.)
+- [ ] API documentation (OpenAPI/Swagger)
+- [ ] Rate limiting on API endpoints
 - [ ] Security audit
+- [ ] Performance monitoring
 
 ---
 
 ## Key Decisions Made
 
 1. **Feature Flag Approach**: `STRAVA_ENABLED` allows safe deployment
-2. **In-Memory First**: Quick prototype, but needs DB for production
+2. **Database First**: PostgreSQL with SQLAlchemy ORM for persistence
 3. **Manual Sync**: Start simple, add automation later
-4. **Single User Demo**: Proof of concept, expand to multi-user later
+4. **Athlete ID as User ID**: Use Strava athlete_id as user identifier (single-user for now)
 5. **On-Demand Analysis**: No pre-computation, analyze when requested
+6. **Activity Caching**: Store full Strava API response in `raw_json` for flexibility
+7. **Idempotent Upserts**: All database writes use upsert pattern to prevent duplicates
+8. **Connection Pooling**: SQLAlchemy connection pool for efficient DB access
 
 ---
 
