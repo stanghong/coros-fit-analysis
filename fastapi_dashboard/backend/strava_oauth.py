@@ -463,11 +463,12 @@ async def strava_status():
             try:
                 # Get any user with a token (for MVP, get the first one)
                 from models import User, StravaToken
-                token = db.query(StravaToken).join(User).first()
+                token = db.query(StravaToken).join(User).order_by(StravaToken.updated_at.desc()).first()
                 
                 if token and token.user:
                     # Get athlete info from raw_json or construct from user
                     athlete_id = token.user.strava_athlete_id
+                    print(f"DEBUG: /strava/status returning athlete_id={athlete_id} for user_id={token.user.id}")
                     return {
                         "connected": True,
                         "athlete_id": athlete_id,
@@ -477,6 +478,8 @@ async def strava_status():
                             "lastname": ""
                         }
                     }
+                else:
+                    print("DEBUG: /strava/status - No token found in database")
             finally:
                 db.close()
         except Exception as e:

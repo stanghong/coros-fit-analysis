@@ -2055,10 +2055,17 @@
                 try {
                     const statusResponse = await fetch('/strava/status');
                     const status = await statusResponse.json();
+                    console.log('Strava status response:', status);
+                    
                     if (status.connected && status.athlete_id) {
                         athleteId = status.athlete_id;
+                        console.log('Using athlete_id from status:', athleteId);
                     } else if (status.connected && status.athlete && status.athlete.id) {
                         athleteId = status.athlete.id;
+                        console.log('Using athlete_id from status.athlete.id:', athleteId);
+                    } else {
+                        console.warn('Status response:', status);
+                        console.warn('Could not extract athlete_id from status response');
                     }
                 } catch (e) {
                     console.error('Failed to get athlete_id from status:', e);
@@ -2068,6 +2075,7 @@
                     throw new Error('Could not determine athlete_id. Please reconnect to Strava.');
                 }
                 
+                console.log('Calling /strava/import-latest with athlete_id:', athleteId);
                 const response = await fetch(`/strava/import-latest?athlete_id=${athleteId}&limit=30`);
                 if (!response.ok) {
                     const error = await response.json();
