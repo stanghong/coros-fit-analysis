@@ -716,22 +716,30 @@
         <!-- Strava Section (only shown if enabled) -->
         <div id="stravaSection" class="tab-section" style="display: none;">
             <div class="upload-section">
+                <!-- Connect Button - Always visible when not connected -->
                 <div class="upload-box" id="stravaConnectBox">
                     <p style="font-size: 1.2em; margin-bottom: 20px;">🔗 Connect Your Strava Account</p>
-                    <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">Sync your workouts from Strava for automatic analysis</p>
-                    <button class="upload-btn" id="stravaConnectBtn" onclick="connectStrava()">
-                        Connect Strava
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 20px;">Sync your workouts from Strava for automatic analysis</p>
+                    <button class="upload-btn" id="stravaConnectBtn" onclick="connectStrava()" 
+                            style="font-size: 1.2em; padding: 18px 50px; font-weight: bold;">
+                        🔗 Connect Strava
                     </button>
                 </div>
+                
+                <!-- Connected State - Show when connected -->
                 <div class="upload-box" id="stravaImportBox" style="display: none; margin-top: 20px;">
                     <p style="font-size: 1.2em; margin-bottom: 20px;">✅ Connected to Strava</p>
-                    <p id="stravaAthleteInfo" style="font-size: 0.9em; color: #666; margin-bottom: 15px;"></p>
-                    <button class="upload-btn" id="stravaImportBtn" onclick="importLatestActivity()">
-                        Load Activities
-                    </button>
+                    <p id="stravaAthleteInfo" style="font-size: 0.9em; color: #666; margin-bottom: 20px;"></p>
+                    
+                    <!-- Always show a reconnect button option -->
                     <button class="upload-btn" id="stravaReconnectBtn" onclick="connectStrava()" 
-                            style="display: none; margin-top: 10px; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
+                            style="margin-bottom: 15px; background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);">
                         🔄 Reconnect Strava
+                    </button>
+                    
+                    <button class="upload-btn" id="stravaImportBtn" onclick="importLatestActivity()"
+                            style="font-size: 1.1em; padding: 15px 40px;">
+                        ⬇️ Load Activities
                     </button>
                     <div id="stravaImportStatus" style="margin-top: 15px;"></div>
                     <div id="stravaActivitiesList" style="margin-top: 20px; display: none;">
@@ -2147,12 +2155,18 @@
                 `;
                 showError(error.message);
                 
-                // Show reconnect button for token errors
+                // Show reconnect button for token errors (make it prominent)
                 if (isTokenError) {
                     const reconnectBtn = document.getElementById('stravaReconnectBtn');
+                    const importBox = document.getElementById('stravaImportBox');
                     if (reconnectBtn) {
                         reconnectBtn.style.display = 'inline-block';
+                        reconnectBtn.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                        reconnectBtn.style.fontSize = '1.1em';
+                        reconnectBtn.style.padding = '15px 40px';
                     }
+                    // Make sure import box is visible so reconnect button shows
+                    if (importBox) importBox.style.display = 'block';
                 }
             } finally {
                 importBtn.disabled = false;
@@ -2324,7 +2338,7 @@
                     const reconnectBtn = document.getElementById('stravaReconnectBtn');
                     if (connectBox) connectBox.style.display = 'none';
                     if (importBox) importBox.style.display = 'block';
-                    if (reconnectBtn) reconnectBtn.style.display = 'none'; // Hide reconnect button when connected
+                    if (reconnectBtn) reconnectBtn.style.display = 'inline-block'; // Always show reconnect option
                     
                     // Show athlete info
                     const athleteInfo = document.getElementById('stravaAthleteInfo');
