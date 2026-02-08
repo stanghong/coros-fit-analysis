@@ -780,7 +780,7 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
     Analyze multiple Strava activities and compare them.
     
     Request body: JSON array of activity IDs [123, 456, 789]
-    Query parameter: athlete_id (required)
+    Query parameter: athlete_id (optional, uses database if provided, falls back to in-memory)
     """
     try:
         activity_ids = await request.json()
@@ -789,35 +789,33 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid request body: {str(e)}")
     
-    if not DB_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Database not available. Please configure DATABASE_URL."
-        )
+    access_token = None
     
-    if not athlete_id:
-        raise HTTPException(
-            status_code=400,
-            detail="athlete_id query parameter is required"
-        )
-    
-    # Get valid access token from database (auto-refreshes if expired)
-    try:
-        db_gen = get_db()
-        db = next(db_gen)
+    # Try database first if athlete_id is provided and DB is available
+    if athlete_id and DB_AVAILABLE:
         try:
-            access_token = await ensure_valid_access_token(db, athlete_id)
-            if not access_token:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Not connected to Strava. Please connect your Strava account first."
-                )
-        finally:
-            db.close()
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"ERROR: Failed to get access token: {str(e)}")
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                access_token = await ensure_valid_access_token(db, athlete_id)
+                if access_token:
+                    print(f"INFO: Using database token for athlete_id={athlete_id}")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"WARNING: Failed to get token from database: {str(e)}, falling back to in-memory")
+    
+    # Fallback to in-memory tokens (backward compatibility)
+    if not access_token:
+        user_id = "default_user"  # TODO: Get from session
+        
+        if user_id in strava_tokens:
+            tokens = strava_tokens[user_id]
+            access_token = tokens.get("access_token")
+            if access_token:
+                print(f"INFO: Using in-memory token for user_id={user_id}")
+    
+    if not access_token:
         raise HTTPException(
             status_code=401,
             detail="Not connected to Strava. Please connect your Strava account first."
@@ -927,38 +925,35 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
 async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = None):
     """
     Fetch Strava activity streams and analyze using workout analysis engine.
+    Supports both database-backed tokens (if athlete_id provided) and in-memory tokens (fallback).
     """
-    if not DB_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Database not available. Please configure DATABASE_URL."
-        )
+    access_token = None
     
-    if not athlete_id:
-        raise HTTPException(
-            status_code=400,
-            detail="athlete_id query parameter is required"
-        )
-    
-    # Get valid access token from database (auto-refreshes if expired)
-    try:
-        db_gen = get_db()
-        db = next(db_gen)
+    # Try database first if athlete_id is provided and DB is available
+    if athlete_id and DB_AVAILABLE:
         try:
-            access_token = await ensure_valid_access_token(db, athlete_id)
-            if not access_token:
-                print(f"ERROR: No valid access token found for athlete_id={athlete_id}")
-                raise HTTPException(
-                    status_code=401,
-                    detail="Not connected to Strava. Please connect your Strava account first."
-                )
-            print(f"INFO: Using access token for athlete_id={athlete_id} (token length: {len(access_token) if access_token else 0})")
-        finally:
-            db.close()
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"ERROR: Failed to get access token: {str(e)}")
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                access_token = await ensure_valid_access_token(db, athlete_id)
+                if access_token:
+                    print(f"INFO: Using database token for athlete_id={athlete_id}")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"WARNING: Failed to get token from database: {str(e)}, falling back to in-memory")
+    
+    # Fallback to in-memory tokens (backward compatibility)
+    if not access_token:
+        user_id = "default_user"  # TODO: Get from session
+        
+        if user_id in strava_tokens:
+            tokens = strava_tokens[user_id]
+            access_token = tokens.get("access_token")
+            if access_token:
+                print(f"INFO: Using in-memory token for user_id={user_id}")
+    
+    if not access_token:
         raise HTTPException(
             status_code=401,
             detail="Not connected to Strava. Please connect your Strava account first."

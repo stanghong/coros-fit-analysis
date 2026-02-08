@@ -2273,7 +2273,11 @@
                     throw new Error('Invalid activity ID');
                 }
                 
-                const response = await fetch(`/strava/analyze-activity/${activityId}?athlete_id=${currentAthleteId}`, {
+                // Try with athlete_id if available, otherwise use old endpoint (backward compatible)
+                const url = currentAthleteId 
+                    ? `/strava/analyze-activity/${activityId}?athlete_id=${currentAthleteId}`
+                    : `/strava/analyze-activity/${activityId}`;
+                const response = await fetch(url, {
                     method: 'POST'
                 });
                 
@@ -2376,7 +2380,11 @@
             document.getElementById('error').classList.remove('show');
             
             try {
-                const response = await fetch(`/strava/analyze-activities?athlete_id=${currentAthleteId}`, {
+                // Try with athlete_id if available, otherwise use old endpoint (backward compatible)
+                const url = currentAthleteId 
+                    ? `/strava/analyze-activities?athlete_id=${currentAthleteId}`
+                    : `/strava/analyze-activities`;
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
