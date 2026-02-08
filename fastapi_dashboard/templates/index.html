@@ -729,6 +729,10 @@
                     <button class="upload-btn" id="stravaImportBtn" onclick="importLatestActivity()">
                         Load Activities
                     </button>
+                    <button class="upload-btn" id="stravaReconnectBtn" onclick="connectStrava()" 
+                            style="display: none; margin-top: 10px; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
+                        🔄 Reconnect Strava
+                    </button>
                     <div id="stravaImportStatus" style="margin-top: 15px;"></div>
                     <div id="stravaActivitiesList" style="margin-top: 20px; display: none;">
                         <h3 style="color: #667eea; margin-bottom: 15px;">Select Activities to Analyze:</h3>
@@ -2059,7 +2063,18 @@
                 const response = await fetch(`/strava/import-latest?athlete_id=${athleteId}&limit=30`);
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.detail || 'Failed to import activities');
+                    const errorMessage = error.detail || 'Failed to import activities';
+                    
+                    // If 401 (Unauthorized), show reconnect button
+                    if (response.status === 401) {
+                        const reconnectBtn = document.getElementById('stravaReconnectBtn');
+                        if (reconnectBtn) {
+                            reconnectBtn.style.display = 'inline-block';
+                        }
+                        throw new Error('Strava access token expired or invalid. Please click "Reconnect Strava" to refresh your connection.');
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
                 
                 const data = await response.json();
@@ -2125,8 +2140,20 @@
                 }
                 
             } catch (error) {
-                statusDiv.innerHTML = `<p style="color: #e74c3c;">Error: ${error.message}</p>`;
+                const isTokenError = error.message.includes('token') || error.message.includes('expired') || error.message.includes('invalid');
+                statusDiv.innerHTML = `
+                    <p style="color: #e74c3c; font-weight: bold;">⚠ Error: ${error.message}</p>
+                    ${isTokenError ? '<p style="font-size: 0.9em; color: #666; margin-top: 10px;">Click "Reconnect Strava" below to refresh your connection.</p>' : ''}
+                `;
                 showError(error.message);
+                
+                // Show reconnect button for token errors
+                if (isTokenError) {
+                    const reconnectBtn = document.getElementById('stravaReconnectBtn');
+                    if (reconnectBtn) {
+                        reconnectBtn.style.display = 'inline-block';
+                    }
+                }
             } finally {
                 importBtn.disabled = false;
                 importBtn.textContent = 'Load Activities';
@@ -2294,8 +2321,10 @@
                     // Show import box, hide connect box
                     const connectBox = document.getElementById('stravaConnectBox');
                     const importBox = document.getElementById('stravaImportBox');
+                    const reconnectBtn = document.getElementById('stravaReconnectBtn');
                     if (connectBox) connectBox.style.display = 'none';
                     if (importBox) importBox.style.display = 'block';
+                    if (reconnectBtn) reconnectBtn.style.display = 'none'; // Hide reconnect button when connected
                     
                     // Show athlete info
                     const athleteInfo = document.getElementById('stravaAthleteInfo');
@@ -2308,8 +2337,10 @@
                     // Show connect box, hide import box
                     const connectBox = document.getElementById('stravaConnectBox');
                     const importBox = document.getElementById('stravaImportBox');
+                    const reconnectBtn = document.getElementById('stravaReconnectBtn');
                     if (connectBox) connectBox.style.display = 'block';
                     if (importBox) importBox.style.display = 'none';
+                    if (reconnectBtn) reconnectBtn.style.display = 'none';
                 }
             } catch (error) {
                 console.error('Failed to check Strava status:', error);
