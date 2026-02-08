@@ -507,7 +507,8 @@ async def token_check(athlete_id: Optional[int] = None):
         {
             "valid": bool,
             "expires_at": int (Unix timestamp) if valid,
-            "error": str if invalid/error
+            "error": str if invalid/error,
+            "debug": dict with token details (for debugging)
         }
     """
     if not athlete_id:
