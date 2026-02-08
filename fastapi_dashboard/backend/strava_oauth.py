@@ -186,12 +186,13 @@ async def strava_callback(
                     "athlete": athlete
                 }
             
-            # Return simple HTML success page
+            # Return simple HTML success page with auto-redirect
             return HTMLResponse(content=f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <title>Strava Connected</title>
+                <meta http-equiv="refresh" content="3;url=/?strava_connected=true">
                 <style>
                     body {{
                         font-family: Arial, sans-serif;
@@ -229,14 +230,34 @@ async def strava_callback(
                     a:hover {{
                         background: #5568d3;
                     }}
+                    .countdown {{
+                        color: #999;
+                        font-size: 0.9em;
+                        margin-top: 20px;
+                    }}
                 </style>
             </head>
             <body>
                 <div class="container">
                     <h1>✅ Strava Connected</h1>
                     <p>Your Strava account has been successfully connected!</p>
-                    <a href="/">Go to Dashboard</a>
+                    <a href="/?strava_connected=true">Go to Dashboard</a>
+                    <p class="countdown">Redirecting automatically in 3 seconds...</p>
                 </div>
+                <script>
+                    // Suppress browser extension errors (they're harmless)
+                    window.addEventListener('error', function(e) {{
+                        if (e.message && e.message.includes('message channel closed')) {{
+                            e.preventDefault();
+                            return false;
+                        }}
+                    }}, true);
+                    
+                    // Auto-redirect after 3 seconds
+                    setTimeout(function() {{
+                        window.location.href = '/?strava_connected=true';
+                    }}, 3000);
+                </script>
             </body>
             </html>
             """)
