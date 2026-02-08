@@ -775,11 +775,12 @@ async def token_check(athlete_id: Optional[int] = None):
 
 
 @router.post("/analyze-activities")
-async def analyze_multiple_strava_activities(request: Request):
+async def analyze_multiple_strava_activities(request: Request, athlete_id: Optional[int] = None):
     """
     Analyze multiple Strava activities and compare them.
     
     Request body: JSON array of activity IDs [123, 456, 789]
+    Query parameter: athlete_id (required)
     """
     try:
         activity_ids = await request.json()
@@ -787,21 +788,39 @@ async def analyze_multiple_strava_activities(request: Request):
             raise HTTPException(status_code=400, detail="Request body must be a JSON array of activity IDs")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid request body: {str(e)}")
-    user_id = "default_user"  # TODO: Get from session
     
-    if user_id not in strava_tokens:
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Please configure DATABASE_URL."
+        )
+    
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    # Get valid access token from database (auto-refreshes if expired)
+    try:
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            access_token = ensure_valid_access_token(db, athlete_id)
+            if not access_token:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Not connected to Strava. Please connect your Strava account first."
+                )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Failed to get access token: {str(e)}")
         raise HTTPException(
             status_code=401,
             detail="Not connected to Strava. Please connect your Strava account first."
-        )
-    
-    tokens = strava_tokens[user_id]
-    access_token = tokens.get("access_token")
-    
-    if not access_token:
-        raise HTTPException(
-            status_code=401,
-            detail="No access token found. Please reconnect your Strava account."
         )
     
     if httpx is None:
@@ -905,25 +924,42 @@ async def analyze_multiple_strava_activities(request: Request):
 
 
 @router.post("/analyze-activity/{activity_id}")
-async def analyze_strava_activity(activity_id: int):
+async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = None):
     """
     Fetch Strava activity streams and analyze using workout analysis engine.
     """
-    user_id = "default_user"  # TODO: Get from session
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Please configure DATABASE_URL."
+        )
     
-    if user_id not in strava_tokens:
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    # Get valid access token from database (auto-refreshes if expired)
+    try:
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            access_token = ensure_valid_access_token(db, athlete_id)
+            if not access_token:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Not connected to Strava. Please connect your Strava account first."
+                )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Failed to get access token: {str(e)}")
         raise HTTPException(
             status_code=401,
             detail="Not connected to Strava. Please connect your Strava account first."
-        )
-    
-    tokens = strava_tokens[user_id]
-    access_token = tokens.get("access_token")
-    
-    if not access_token:
-        raise HTTPException(
-            status_code=401,
-            detail="No access token found. Please reconnect your Strava account."
         )
     
     if httpx is None:

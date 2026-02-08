@@ -1004,6 +1004,7 @@
         
         // Feature flags
         let stravaEnabled = {{ 'true' if strava_enabled else 'false' }};
+        let currentAthleteId = null; // Store athlete_id for API calls
         
         // Immediately show/hide Strava tab based on server-side value (runs before DOMContentLoaded)
         document.addEventListener('DOMContentLoaded', function() {
@@ -2061,9 +2062,11 @@
                     
                     if (status.connected && status.athlete_id) {
                         athleteId = status.athlete_id;
+                        currentAthleteId = athleteId; // Store globally
                         console.log('Using athlete_id from status:', athleteId);
                     } else if (status.connected && status.athlete && status.athlete.id) {
                         athleteId = status.athlete.id;
+                        currentAthleteId = athleteId; // Store globally
                         console.log('Using athlete_id from status.athlete.id:', athleteId);
                     } else {
                         console.warn('Status response:', status);
@@ -2240,13 +2243,33 @@
                 return;
             }
             
+            // Get athlete_id if not already stored
+            if (!currentAthleteId) {
+                try {
+                    const statusResponse = await fetch('/strava/status');
+                    const status = await statusResponse.json();
+                    if (status.connected && status.athlete_id) {
+                        currentAthleteId = status.athlete_id;
+                    } else if (status.connected && status.athlete && status.athlete.id) {
+                        currentAthleteId = status.athlete.id;
+                    }
+                } catch (e) {
+                    console.error('Failed to get athlete_id:', e);
+                }
+            }
+            
+            if (!currentAthleteId) {
+                showError('Could not determine athlete_id. Please reconnect to Strava.');
+                return;
+            }
+            
             // Show loading
             document.getElementById('loading').classList.add('show');
             document.getElementById('results').classList.remove('show');
             document.getElementById('error').classList.remove('show');
             
             try {
-                const response = await fetch(`/strava/analyze-activity/${activityId}`, {
+                const response = await fetch(`/strava/analyze-activity/${activityId}?athlete_id=${currentAthleteId}`, {
                     method: 'POST'
                 });
                 
@@ -2298,6 +2321,26 @@
                 return;
             }
             
+            // Get athlete_id if not already stored
+            if (!currentAthleteId) {
+                try {
+                    const statusResponse = await fetch('/strava/status');
+                    const status = await statusResponse.json();
+                    if (status.connected && status.athlete_id) {
+                        currentAthleteId = status.athlete_id;
+                    } else if (status.connected && status.athlete && status.athlete.id) {
+                        currentAthleteId = status.athlete.id;
+                    }
+                } catch (e) {
+                    console.error('Failed to get athlete_id:', e);
+                }
+            }
+            
+            if (!currentAthleteId) {
+                showError('Could not determine athlete_id. Please reconnect to Strava.');
+                return;
+            }
+            
             const checkboxes = document.querySelectorAll('.strava-activity-checkbox:checked');
             const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.activityId));
             
@@ -2317,7 +2360,7 @@
             document.getElementById('error').classList.remove('show');
             
             try {
-                const response = await fetch('/strava/analyze-activities', {
+                const response = await fetch(`/strava/analyze-activities?athlete_id=${currentAthleteId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -2373,6 +2416,8 @@
                     // Show athlete info - fetch from debug endpoint for real name
                     const athleteInfo = document.getElementById('stravaAthleteInfo');
                     if (athleteInfo && status.athlete_id) {
+                        // Store athlete_id globally
+                        currentAthleteId = status.athlete_id;
                         // Try to fetch real athlete info from debug endpoint (try both /debug and /strava/debug)
                         Promise.race([
                             fetch(`/debug/strava-athlete?athlete_id=${status.athlete_id}`).catch(() => null),
