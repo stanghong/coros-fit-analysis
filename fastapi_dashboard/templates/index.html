@@ -840,13 +840,13 @@
                         <div style="font-size: 0.85em; color: #555; line-height: 1.6;">
                             <p style="margin: 8px 0;">
                                 <span style="display: inline-block; width: 12px; height: 12px; background: #667eea; border-radius: 3px;"></span>
-                                <strong>Blue bars = Speed (m/s)</strong><br>
-                                Higher bars = faster swimming speed. Look for consistent bar heights = steady pace.
+                                <strong>Blue line = Speed (m/s)</strong><br>
+                                Higher line = faster swimming speed. Look for consistent line height = steady pace.
                             </p>
                             <p style="margin: 8px 0;">
                                 <span style="display: inline-block; width: 12px; height: 12px; background: #f39c12; border-radius: 3px;"></span>
-                                <strong>Orange bars = Stroke Rate (scaled)</strong><br>
-                                Higher bars = more strokes per minute. Consistent = good technique.
+                                <strong>Orange line = Stroke Rate (scaled)</strong><br>
+                                Higher line = more strokes per minute. Consistent = good technique.
                             </p>
                             <p style="margin: 8px 0; font-weight: 500;">
                                 <strong>Tips for improvement:</strong>
@@ -1718,7 +1718,7 @@
 
         function createCharts(data) {
             try {
-                // Dual-axis bar chart: Speed (blue bars) and Stroke Rate (orange bars) on same chart
+                // Dual-axis line chart: Speed (blue line) and Stroke Rate (orange line) on same chart
                 const speedCtx = document.getElementById('speedChart').getContext('2d');
                 if (speedChart) speedChart.destroy();
 
@@ -1739,31 +1739,33 @@
                 const strokeScale = maxSpeed / maxStroke;
 
                 speedChart = new Chart(speedCtx, {
-                    type: 'bar',
+                    type: 'line',
                     data: {
                         labels: alignedTimeLabels,
                         datasets: [
                             {
                                 label: 'Speed (m/s)',
                                 data: alignedSpeed,
-                                backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                                backgroundColor: 'rgba(102, 126, 234, 0.1)',
                                 borderColor: '#667eea',
-                                borderWidth: 1.5,
+                                borderWidth: 2,
                                 yAxisID: 'y',
-                                barPercentage: 0.6,
-                                categoryPercentage: 0.8,
-                                borderRadius: 4
+                                tension: 0.4,
+                                fill: false,
+                                pointRadius: 0,
+                                pointHoverRadius: 4
                             },
                             {
                                 label: 'Stroke Rate (scaled)',
                                 data: alignedStrokeRate.map(v => v * strokeScale),
-                                backgroundColor: 'rgba(243, 156, 18, 0.7)',
+                                backgroundColor: 'rgba(243, 156, 18, 0.1)',
                                 borderColor: '#f39c12',
-                                borderWidth: 1.5,
+                                borderWidth: 2,
                                 yAxisID: 'y',
-                                barPercentage: 0.6,
-                                categoryPercentage: 0.8,
-                                borderRadius: 4
+                                tension: 0.4,
+                                fill: false,
+                                pointRadius: 0,
+                                pointHoverRadius: 4
                             }
                         ]
                     },
