@@ -1330,66 +1330,8 @@
             });
         }
         
-        // Drag and drop for single workout
-        const uploadBox = document.getElementById('uploadBox');
-        uploadBox.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadBox.classList.add('dragover');
-        });
-        
-        uploadBox.addEventListener('dragleave', () => {
-            uploadBox.classList.remove('dragover');
-        });
-        
-        uploadBox.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadBox.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].name.endsWith('.csv')) {
-                selectedFile = files[0];
-                document.getElementById('selectedFileName').textContent = '✓ Selected: ' + files[0].name;
-                const analyzeBtn = document.getElementById('analyzeBtn');
-                analyzeBtn.style.opacity = '1';
-                analyzeBtn.style.cursor = 'pointer';
-                analyzeBtn.disabled = false;
-                // Auto-start analysis after file drop
-                setTimeout(() => {
-                    analyzeSelectedFile();
-                }, 300);
-            } else {
-                showError('Please drop a CSV file');
-            }
-        });
-        
-        // Drag and drop for comparison
-        const compareUploadBox = document.getElementById('compareUploadBox');
-        compareUploadBox.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            compareUploadBox.classList.add('dragover');
-        });
-        
-        compareUploadBox.addEventListener('dragleave', () => {
-            compareUploadBox.classList.remove('dragover');
-        });
-        
-        compareUploadBox.addEventListener('drop', (e) => {
-            e.preventDefault();
-            compareUploadBox.classList.remove('dragover');
-            const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
-            if (files.length >= 2) {
-                if (files.length > 20) {
-                    showError('Maximum 20 files allowed');
-                    return;
-                }
-                // Show file list
-                const fileListDiv = document.getElementById('fileList');
-                fileListDiv.innerHTML = '<strong>Selected files:</strong><ul style="margin-top: 10px;">' +
-                    files.map(f => `<li>${f.name}</li>`).join('') + '</ul>';
-                handleCompareFiles(files);
-            } else {
-                showError('Please drop at least 2 CSV files for comparison');
-            }
-        });
+        // Drag and drop code removed - Strava-only interface now
+        // These elements (uploadBox, compareUploadBox) no longer exist
         
         function analyzeSelectedFile() {
             if (!selectedFile) {
