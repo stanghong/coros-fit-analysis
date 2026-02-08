@@ -162,6 +162,115 @@ async def get_config():
     return config
 
 
+@app.get("/debug/strava-athlete")
+async def debug_strava_athlete(athlete_id: Optional[int] = None):
+    """
+    Debug endpoint to check which Strava athlete we're connected as.
+    Calls Strava GET /api/v3/athlete and returns athlete info.
+    
+    Args:
+        athlete_id: Strava athlete ID (query parameter, optional)
+        
+    Returns:
+        {
+            "id": int,
+            "username": str,
+            "firstname": str,
+            "lastname": str
+        }
+    """
+    # Import here to avoid circular dependencies
+    if not STRAVA_ENABLED:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Strava integration not enabled"}
+        )
+    
+    try:
+        import httpx
+        from db import get_db
+        from models import User, StravaToken
+        from strava_store import ensure_valid_access_token
+        
+        if not DB_AVAILABLE:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Database not available. Athlete check requires database."}
+            )
+        
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # If athlete_id not provided, get the most recent token
+            if not athlete_id:
+                token = db.query(StravaToken).join(User).order_by(StravaToken.updated_at.desc()).first()
+                if token and token.user:
+                    athlete_id = token.user.strava_athlete_id
+                else:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error": "Not connected to Strava"}
+                    )
+            
+            # Ensure we have a valid access token
+            access_token = await ensure_valid_access_token(db, athlete_id)
+            
+            if not access_token:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Not connected to Strava. No valid token found or refresh failed."}
+                )
+            
+            # Call Strava API to get athlete info
+            async with httpx.AsyncClient() as client:
+                athlete_response = await client.get(
+                    "https://www.strava.com/api/v3/athlete",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=10.0
+                )
+                
+                if athlete_response.status_code == 401 or athlete_response.status_code == 403:
+                    error_detail = athlete_response.text
+                    try:
+                        error_json = athlete_response.json()
+                        error_detail = str(error_json)
+                    except:
+                        pass
+                    return JSONResponse(
+                        status_code=athlete_response.status_code,
+                        content={
+                            "error": "strava_error",
+                            "details": error_detail
+                        }
+                    )
+                
+                athlete_response.raise_for_status()
+                athlete_data = athlete_response.json()
+                
+                return {
+                    "id": athlete_data.get("id"),
+                    "username": athlete_data.get("username"),
+                    "firstname": athlete_data.get("firstname"),
+                    "lastname": athlete_data.get("lastname")
+                }
+        finally:
+            db.close()
+    except ImportError as e:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Strava integration not available", "details": str(e)}
+        )
+    except Exception as e:
+        import traceback
+        print(f"ERROR: Exception in /debug/strava-athlete: {str(e)}\n{traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error checking Strava athlete: {str(e)}"}
+        )
+
+
 # Import Strava OAuth routes if enabled
 if STRAVA_ENABLED:
     try:
