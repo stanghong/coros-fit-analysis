@@ -985,6 +985,22 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
                 f"https://www.strava.com/api/v3/activities/{activity_id}",
                 headers={"Authorization": f"Bearer {access_token}"}
             )
+            
+            # Handle authorization errors specifically
+            if activity_response.status_code == 401 or activity_response.status_code == 403:
+                error_detail = activity_response.text
+                try:
+                    error_json = activity_response.json()
+                    error_detail = str(error_json)
+                except:
+                    pass
+                print(f"ERROR: Strava authorization failed for activity {activity_id}: {error_detail}")
+                print(f"DEBUG: Token length: {len(access_token) if access_token else 0}")
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"Strava authorization failed. The access token may be invalid or expired. Please reconnect your Strava account. Error: {error_detail}"
+                )
+            
             activity_response.raise_for_status()
             activity = activity_response.json()
             
@@ -1046,6 +1062,17 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Activity not found")
+        elif e.response.status_code == 401 or e.response.status_code == 403:
+            error_detail = e.response.text
+            try:
+                error_json = e.response.json()
+                error_detail = str(error_json)
+            except:
+                pass
+            raise HTTPException(
+                status_code=401,
+                detail=f"Strava authorization failed. Please reconnect your Strava account. Error: {error_detail}"
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch Strava activity: {e.response.text}"

@@ -179,6 +179,11 @@ async def ensure_valid_access_token(db: Session, athlete_id: int) -> Optional[st
     token = get_token_for_athlete(db, athlete_id)
     
     if not token:
+        print(f"DEBUG: No token found in database for athlete_id={athlete_id}")
+        return None
+    
+    if not token.access_token:
+        print(f"DEBUG: Token exists but access_token is empty for athlete_id={athlete_id}")
         return None
     
     # Check if token is expired (with 60 second buffer)
