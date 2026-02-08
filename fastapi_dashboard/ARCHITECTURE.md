@@ -122,7 +122,7 @@ This document describes the current architecture of the Swimming Workout Dashboa
 │                            ▼                                     │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                    SYNC LAYER                              │  │
-│  │  Current: On-demand fetch with database caching           │  │
+│  │  Current: On-demand + background sync with database caching│  │
 │  │  • User clicks "Load Activities" → Fetch from Strava       │  │
 │  │    → Upsert to database (idempotent)                       │  │
 │  │  • User clicks "Analyze" → Fetch streams from Strava      │  │
@@ -132,12 +132,14 @@ This document describes the current architecture of the Swimming Workout Dashboa
 │  │  Implemented:                                              │  │
 │  │  • Idempotent upserts (upsert_activity checks by ID)        │  │
 │  │  • Token refresh with DB persistence                       │  │
+│  │  • Retry logic with exponential backoff (strava_retry.py)  │  │
+│  │  • Rate limit handling (strava_rate_limiter.py)           │  │
+│  │  • Background sync job (strava_background_sync.py)        │  │
+│  │  • Incremental sync (only fetch new activities)            │  │
 │  │                                                             │  │
 │  │  ⚠️  TODO:                                                  │  │
-│  │     • Retry logic with exponential backoff                 │  │
-│  │     • Background job to sync new activities                 │  │
-│  │     • Handle rate limits (200/15min, 2000/day)            │  │
 │  │     • Conflict resolution (activity updated on Strava)     │  │
+│  │     • Webhook support for real-time updates                │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                             │
@@ -261,18 +263,20 @@ PostgreSQL database (Supabase) stores users, OAuth tokens, and cached activities
 - On-demand stream fetching when user clicks "Analyze"
 - Idempotent upserts via `upsert_activity()` (checks if activity exists by ID)
 - Token refresh with database persistence (auto-updates DB on refresh)
-- Basic error handling (shows error message if API call fails)
+- Retry logic with exponential backoff (`strava_retry.py`)
+- Rate limit handling (`strava_rate_limiter.py`) - tracks 200/15min and 2000/day limits
+- Background sync job (`strava_background_sync.py`) - periodic polling when `BACKGROUND_SYNC_ENABLED=true`
+- Incremental sync - only fetches new activities since last sync timestamp
 - Activity caching in database (reduces Strava API calls)
+- Comprehensive error handling with retry and rate limit awareness
 
 **What's missing:**
-- Retry logic with exponential backoff
-- Background sync job (periodic polling or webhook processing)
-- Rate limit handling (Strava: 200/15min, 2000/day)
 - Conflict resolution (what if activity updated on Strava?)
-- Incremental sync (only fetch new activities since last sync)
+- Webhook support for real-time updates (instead of polling)
+- Sync status dashboard/monitoring
 
 **2-3 sentence summary:**
-On-demand sync with database caching. When user clicks "Load Activities", activities are fetched from Strava API and upserted to database (idempotent - won't create duplicates). Tokens are automatically refreshed when expired and persisted to database. No retry logic, background jobs, or rate limit handling yet - needs these for production scale.
+Production-ready sync layer with retry logic, rate limiting, and background jobs. When user clicks "Load Activities", activities are fetched from Strava API with automatic retries and rate limit tracking, then upserted to database (idempotent - won't create duplicates). Background sync job can run periodically to fetch new activities automatically. Incremental sync only fetches activities newer than the last sync timestamp.
 
 ---
 
@@ -280,15 +284,16 @@ On-demand sync with database caching. When user clicks "Load Activities", activi
 
 **What exists:**
 - FastAPI backend with HTML frontend
-- CSV upload and analysis (`/api/analyze`)
-- Multi-workout comparison (`/api/compare`)
-- Strava integration endpoints (`/strava/*`)
+- Strava integration endpoints (`/strava/*`) - main interface
+- Multi-workout comparison for Strava activities
 - Feature flag system (`STRAVA_ENABLED`)
 - Responsive UI with mobile support
 - Interactive charts (Chart.js)
 - Coach summary display (single and multi-workout)
+- Real-time athlete identity display
 
 **What's missing:**
+- CSV upload (removed - Strava-only now)
 - User authentication/authorization
 - API versioning
 - Rate limiting
@@ -296,7 +301,7 @@ On-demand sync with database caching. When user clicks "Load Activities", activi
 - Error tracking/monitoring
 
 **2-3 sentence summary:**
-FastAPI backend serves HTML dashboard and REST API endpoints. Frontend allows CSV upload, Strava connection, and displays analysis results with charts and coaching insights. Feature flags control Strava visibility. Missing user auth, API docs, and monitoring for production.
+FastAPI backend serves HTML dashboard focused on Strava integration. Frontend allows Strava connection, activity selection, and displays analysis results with charts and coaching insights. Feature flags control Strava visibility. Missing user auth, API docs, and monitoring for production.
 
 ---
 
@@ -354,20 +359,20 @@ Frontend: Shows "Import Latest Activity" button
 
 ### Production Readiness Gaps:
 
-1. **No Automatic Sync**
-   - Manual user action required
-   - No background jobs
-   - No webhook support
+1. **Limited Automatic Sync**
+   - ✅ Background sync job implemented (requires `BACKGROUND_SYNC_ENABLED=true`)
+   - ⚠️  No webhook support (still uses polling)
+   - ⚠️  Manual user action still required for on-demand sync
 
 2. **Single User Only**
    - No session management
    - No user isolation
    - Athlete ID used as user identifier
 
-3. **Limited Error Recovery**
-   - No retry logic with exponential backoff
-   - No rate limit handling (Strava: 200/15min, 2000/day)
-   - Basic error messages only
+3. **Error Recovery**
+   - ✅ Retry logic with exponential backoff implemented
+   - ✅ Rate limit handling implemented (200/15min, 2000/day)
+   - ⚠️  Basic error messages (could be more detailed)
 
 4. **Security Concerns**
    - Tokens stored as plain text in database (no encryption)
@@ -387,10 +392,12 @@ Frontend: Shows "Import Latest Activity" button
 
 ### Priority 1: Sync Layer Improvements
 - [x] Implement idempotent upserts ✅
-- [ ] Add retry logic with exponential backoff
-- [ ] Handle rate limits (Strava: 200/15min, 2000/day)
-- [ ] Background sync job (periodic polling or webhook)
-- [ ] Incremental sync (only fetch new activities)
+- [x] Add retry logic with exponential backoff ✅
+- [x] Handle rate limits (Strava: 200/15min, 2000/day) ✅
+- [x] Background sync job (periodic polling) ✅
+- [x] Incremental sync (only fetch new activities) ✅
+- [ ] Conflict resolution (activity updated on Strava)
+- [ ] Webhook support for real-time updates
 
 ### Priority 2: Multi-User Support
 - [ ] User authentication system

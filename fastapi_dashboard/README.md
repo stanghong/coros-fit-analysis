@@ -4,15 +4,18 @@ A full-stack web application for analyzing swimming workouts with automated scor
 
 ## Features
 
-- 📊 **Upload CSV workout files** from Coros devices
+- 🔗 **Strava Integration** - Connect your Strava account and analyze swimming workouts automatically
+- 📊 **Activity Import** - Load and cache your latest Strava swimming activities
 - 🎯 **Automated scoring** (A/B/C/D grades) based on 4 key metrics
 - 📈 **Interactive visualizations**:
-  - Speed & Stroke Rate trends over time
-  - Speed vs Efficiency cloud plot (new!)
+  - Speed & Stroke Rate trends over time (line charts)
+  - Speed vs Efficiency cloud plot
 - ✅ **Pros & Cons** analysis
 - 📋 **Next workout prescriptions** based on limiters
-- 🔄 **Workout comparison** - Compare multiple workouts to track progress
-- 🎨 **Modern, responsive UI**
+- 🔄 **Multi-workout comparison** - Compare 2-20 activities to track progress and trends
+- 🎨 **Modern, responsive UI** with mobile support
+- 🔄 **Background sync** - Automatic activity synchronization (optional)
+- ⚡ **Retry logic & rate limiting** - Production-ready error handling
 
 ## Installation
 
@@ -52,7 +55,7 @@ pip install -r requirements.txt
    ```
    ⚠️  **Warning**: Only set this in development. In production, use proper migrations.
    
-   **Note**: Database is required for Strava integration features (OAuth token storage, activity caching). CSV upload and analysis work without a database.
+   **Note**: Database is required for Strava integration features (OAuth token storage, activity caching). The application is designed for Strava integration.
    
    Test the connection:
    ```bash
@@ -89,23 +92,26 @@ http://localhost:8000
 
 ## Usage
 
-1. **Upload a CSV file**: Click "Choose File" or drag and drop a swimming workout CSV file
-2. **View Analysis**: The dashboard will automatically:
-   - Calculate scores (Distance, Pace, Stroke, Speed Gears)
-   - Assign a grade (A/B/C/D)
-   - Generate pros and cons
-   - Provide next workout prescription
-   - Display interactive charts
+1. **Connect Strava**: Click "Connect Strava" to authorize the application
+2. **Load Activities**: Click "Load Activities" to import your latest swimming workouts
+3. **Analyze**: Select one or more activities and click "Analyze Selected" or "Compare Selected"
+4. **View Results**: The dashboard will display:
+   - Coach summary (headline, constraint, action)
+   - Automated scores (Distance, Pace, Stroke, Speed Gears)
+   - Grade assignment (A/B/C/D)
+   - Pros and cons
+   - Next workout prescription
+   - Interactive charts and visualizations
 
 ## API Endpoints
 
 ### `GET /`
 Main dashboard page (HTML)
 
-### `POST /api/analyze`
-Analyze uploaded CSV file
+### `POST /strava/analyze-activity/{activity_id}`
+Analyze a single Strava activity
 
-**Request**: Multipart form data with `file` field (CSV file)
+**Request**: Query parameter `athlete_id` (optional, uses database token if not provided)
 
 **Response**: JSON with analysis results:
 ```json
@@ -168,22 +174,25 @@ fastapi_dashboard/
 │   ├── db.py                   # Database configuration (SQLAlchemy)
 │   ├── models.py               # SQLAlchemy ORM models (User, StravaToken, Activity)
 │   ├── strava_store.py         # Database operations for Strava (tokens, activities)
-│   ├── analysis_engine.py      # Workout analysis logic
-│   ├── comparison_engine.py   # Multi-workout comparison
 │   ├── strava_oauth.py         # Strava OAuth integration
-│   └── strava_converter.py     # Strava data conversion
+│   ├── strava_converter.py     # Strava data conversion
+│   ├── strava_sync.py          # Sync service (incremental sync, retry, rate limiting)
+│   ├── strava_retry.py         # Retry logic with exponential backoff
+│   ├── strava_rate_limiter.py  # Rate limit tracking and enforcement
+│   ├── strava_background_sync.py  # Background sync job
+│   ├── analysis_engine.py      # Workout analysis logic
+│   └── comparison_engine.py   # Multi-workout comparison
 ├── migrations/
 │   ├── 001_add_users_updated_at.sql  # Database migration scripts
 │   └── README.md               # Migration instructions
 ├── templates/
 │   └── index.html              # Frontend HTML with Chart.js
 ├── static/                     # Static files (if needed)
-├── uploads/                     # Temporary file storage
 ├── requirements.txt             # Python dependencies
 ├── README.md                    # This file
 ├── QUICKSTART.md                # Quick setup guide
-├── COMPARISON_FEATURE.md        # Comparison feature docs
 ├── ARCHITECTURE.md              # System architecture documentation
+├── SYNC_FEATURES.md             # Sync layer features documentation
 └── TROUBLESHOOTING.md           # Troubleshooting guide
 ```
 
@@ -195,8 +204,36 @@ The application uses:
 - **Chart.js** for visualizations
 - **Jinja2** for templating
 
+## Strava Integration
+
+The application integrates with Strava API to:
+- Authenticate users via OAuth 2.0
+- Fetch and cache swimming activities
+- Analyze activity streams (speed, cadence, heart rate)
+- Provide automated coaching insights
+
+### Environment Variables
+
+Set these in your `.env` file or Render environment:
+
+```bash
+STRAVA_ENABLED=true
+STRAVA_CLIENT_ID=your_client_id
+STRAVA_CLIENT_SECRET=your_client_secret
+STRAVA_REDIRECT_URI=http://localhost:8000/strava/callback  # Local
+# or
+STRAVA_REDIRECT_URI=https://your-app.onrender.com/strava/callback  # Production
+STRAVA_SCOPE=read,activity:read_all
+
+# Optional: Enable background sync
+BACKGROUND_SYNC_ENABLED=true
+```
+
+See `RENDER_STRAVA_SETUP.md` for detailed setup instructions.
+
 ## Notes
 
-- Uploaded files are temporarily stored and automatically deleted after analysis
-- The application expects CSV files with Coros workout data format
+- Activities are cached in the database to reduce Strava API calls
+- Tokens are automatically refreshed when expired
+- Rate limiting and retry logic are built-in for production reliability
 - All analysis happens server-side for security

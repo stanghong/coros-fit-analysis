@@ -674,47 +674,8 @@
             <p>Upload your workout CSV to get instant analysis and coaching recommendations</p>
         </div>
         
-        <!-- Tab Navigation -->
-        <div style="display: flex; gap: 10px; padding: 20px; background: #f8f9ff; border-bottom: 2px solid #e0e0e0;">
-            <button class="tab-btn active" onclick="switchTab('single')" id="tabSingle">Single Workout</button>
-            <button class="tab-btn" onclick="switchTab('compare')" id="tabCompare">Compare Workouts</button>
-            <button class="tab-btn{% if strava_enabled %} strava-enabled{% endif %}" onclick="switchTab('strava')" id="tabStrava"{% if not strava_enabled %} style="display: none;"{% endif %}>Connect Strava</button>
-        </div>
-        
-        <!-- Single Workout Section -->
-        <div id="singleSection" class="tab-section">
-            <div class="upload-section">
-                <div class="upload-box" id="uploadBox">
-                    <p style="font-size: 1.2em; margin-bottom: 20px;">📁 Drop your CSV file here or click to browse</p>
-                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
-                        Choose File
-                    </button>
-                    <input type="file" id="fileInput" accept=".csv" onchange="handleFileSelect(event)" style="display: none;">
-                    <div id="selectedFileName" style="margin-top: 15px; color: #667eea; font-weight: bold; min-height: 20px;"></div>
-                </div>
-                <button class="upload-btn" id="analyzeBtn" onclick="analyzeSelectedFile()" style="margin-top: 20px; width: 100%; max-width: 400px; opacity: 0.5; cursor: not-allowed;" disabled>
-                    📊 Begin Analysis
-                </button>
-            </div>
-        </div>
-        
-        <!-- Compare Workouts Section -->
-        <div id="compareSection" class="tab-section" style="display: none;">
-            <div class="upload-section">
-                <div class="upload-box" id="compareUploadBox">
-                    <p style="font-size: 1.2em; margin-bottom: 20px;">📁 Drop multiple CSV files here or click to browse</p>
-                    <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">Select 2-20 workout files to compare</p>
-                    <button class="upload-btn" onclick="document.getElementById('compareFileInput').click()">
-                        Choose Files
-                    </button>
-                    <input type="file" id="compareFileInput" accept=".csv" multiple onchange="handleCompareFilesSelect(event)">
-                    <div id="fileList" style="margin-top: 20px; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Strava Section (only shown if enabled) -->
-        <div id="stravaSection" class="tab-section" style="display: none;">
+        <!-- Strava Section (main interface) -->
+        <div id="stravaSection" class="tab-section">
             <div class="upload-section">
                 <!-- Connect Button - Always visible when not connected -->
                 <div class="upload-box" id="stravaConnectBox">
@@ -1081,47 +1042,13 @@
             }
         }
         
-        // Tab switching
+        // Tab switching (simplified - only Strava section now)
         function switchTab(tab) {
-            if (tab === 'single') {
-                document.getElementById('singleSection').style.display = 'block';
-                document.getElementById('compareSection').style.display = 'none';
-                if (document.getElementById('stravaSection')) {
-                    document.getElementById('stravaSection').style.display = 'none';
-                }
-                document.getElementById('tabSingle').classList.add('active');
-                document.getElementById('tabCompare').classList.remove('active');
-                if (document.getElementById('tabStrava')) {
-                    document.getElementById('tabStrava').classList.remove('active');
-                }
-                document.getElementById('results').classList.remove('show');
-                document.getElementById('comparisonResults').classList.remove('show');
-            } else if (tab === 'compare') {
-                document.getElementById('singleSection').style.display = 'none';
-                document.getElementById('compareSection').style.display = 'block';
-                if (document.getElementById('stravaSection')) {
-                    document.getElementById('stravaSection').style.display = 'none';
-                }
-                document.getElementById('tabSingle').classList.remove('active');
-                document.getElementById('tabCompare').classList.add('active');
-                if (document.getElementById('tabStrava')) {
-                    document.getElementById('tabStrava').classList.remove('active');
-                }
-                document.getElementById('results').classList.remove('show');
-                document.getElementById('comparisonResults').classList.remove('show');
-            } else if (tab === 'strava' && stravaEnabled) {
-                document.getElementById('singleSection').style.display = 'none';
-                document.getElementById('compareSection').style.display = 'none';
+            // All results are shown in the same view, no tab switching needed
+            if (tab === 'strava' && stravaEnabled) {
                 if (document.getElementById('stravaSection')) {
                     document.getElementById('stravaSection').style.display = 'block';
                 }
-                document.getElementById('tabSingle').classList.remove('active');
-                document.getElementById('tabCompare').classList.remove('active');
-                if (document.getElementById('tabStrava')) {
-                    document.getElementById('tabStrava').classList.add('active');
-                }
-                document.getElementById('results').classList.remove('show');
-                document.getElementById('comparisonResults').classList.remove('show');
             }
         }
         
@@ -2302,9 +2229,6 @@
                 
                 // Display results using existing function
                 displayResults(data);
-                
-                // Switch to single workout tab to show results
-                switchTab('single');
                 document.getElementById('results').classList.add('show');
                 
             } catch (error) {
@@ -2413,9 +2337,6 @@
                 
                 // Display comparison results using existing function
                 displayComparisonResults(data);
-                
-                // Switch to compare tab to show results
-                switchTab('compare');
                 document.getElementById('comparisonResults').classList.add('show');
                 
             } catch (error) {
