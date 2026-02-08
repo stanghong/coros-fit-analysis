@@ -346,9 +346,15 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
                 # Check if token exists but refresh failed
                 token = get_token_for_athlete(db, athlete_id)
                 if token:
+                    # Log token details for debugging
+                    current_time = int(time.time())
+                    print(f"DEBUG: Token exists but refresh failed or token invalid")
+                    print(f"DEBUG: Token expires_at: {token.expires_at}, current_time: {current_time}")
+                    print(f"DEBUG: Token expired: {token.expires_at <= current_time}")
+                    print(f"DEBUG: Has refresh_token: {bool(token.refresh_token)}")
                     raise HTTPException(
                         status_code=401,
-                        detail="Strava access token expired and refresh failed. Please reconnect your Strava account."
+                        detail="Strava access token expired or invalid. The token refresh may have failed. Please reconnect your Strava account."
                     )
                 else:
                     raise HTTPException(

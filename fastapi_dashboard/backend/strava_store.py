@@ -185,7 +185,10 @@ async def ensure_valid_access_token(db: Session, athlete_id: int) -> Optional[st
                         error_detail = str(error_json)
                     except:
                         pass
-                    print(f"ERROR: Strava token refresh failed: {error_detail}")
+                    print(f"ERROR: Strava token refresh failed (status {refresh_response.status_code}): {error_detail}")
+                    print(f"DEBUG: Client ID: {STRAVA_CLIENT_ID[:10]}... (first 10 chars)")
+                    print(f"DEBUG: Has refresh_token: {bool(token.refresh_token)}")
+                    print(f"DEBUG: Refresh token length: {len(token.refresh_token) if token.refresh_token else 0}")
                     return None
                 
                 refresh_data = refresh_response.json()
