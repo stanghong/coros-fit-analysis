@@ -2108,10 +2108,22 @@
                     }
                     
                     if (swimActivities.length === 0) {
+                        const totalScanned = data.count || data.activities.length;
+                        const pagesFetched = data.pages_fetched || 1;
+                        let diagnosticMsg = '';
+                        if (data.diagnostics) {
+                            const sportTypes = data.diagnostics.distinct_sport_types || [];
+                            const types = data.diagnostics.distinct_types || [];
+                            diagnosticMsg = `<br><small style="color: #999;">Sport types seen: ${sportTypes.join(', ') || 'none'}<br>Types seen: ${types.join(', ') || 'none'}</small>`;
+                        }
                         statusDiv.innerHTML = `
                             <p style="color: #f39c12; font-weight: bold;">⚠ No swimming activities found</p>
                             <p style="font-size: 0.9em; color: #666; margin-top: 10px;">
-                                Found ${data.count} activities, but none are swimming workouts.
+                                Scanned ${totalScanned} activities from ${pagesFetched} page(s), but none are swimming workouts.
+                                ${data.activities && data.activities.length > 0 ? 
+                                    `<br>Activity types found: ${data.activities.slice(0, 5).map(a => a.type || 'unknown').join(', ')}` : 
+                                    ''}
+                                ${diagnosticMsg}
                             </p>
                         `;
                     } else {
@@ -2359,16 +2371,22 @@
                     // Show athlete info - fetch from debug endpoint for real name
                     const athleteInfo = document.getElementById('stravaAthleteInfo');
                     if (athleteInfo && status.athlete_id) {
-                        // Try to fetch real athlete info from debug endpoint
-                        fetch(`/strava/debug/strava-athlete?athlete_id=${status.athlete_id}`)
+                        // Try to fetch real athlete info from debug endpoint (try both /debug and /strava/debug)
+                        Promise.race([
+                            fetch(`/debug/strava-athlete?athlete_id=${status.athlete_id}`).catch(() => null),
+                            fetch(`/strava/debug/strava-athlete?athlete_id=${status.athlete_id}`).catch(() => null)
+                        ])
                             .then(response => {
-                                if (response.ok) {
+                                if (response && response.ok) {
                                     return response.json();
                                 }
-                                throw new Error('Failed to fetch athlete info');
+                                // If both failed, try the strava endpoint directly
+                                return fetch(`/strava/debug/strava-athlete?athlete_id=${status.athlete_id}`)
+                                    .then(r => r.ok ? r.json() : null)
+                                    .catch(() => null);
                             })
                             .then(athleteData => {
-                                if (athleteData) {
+                                if (athleteData && !athleteData.error) {
                                     const nameParts = [];
                                     if (athleteData.firstname) nameParts.push(athleteData.firstname);
                                     if (athleteData.lastname) nameParts.push(athleteData.lastname);
@@ -2382,6 +2400,9 @@
                                     if (status.athlete && status.athlete.lastname) nameParts.push(status.athlete.lastname);
                                     const name = nameParts.length > 0 ? nameParts.join(' ') : 'User';
                                     athleteInfo.textContent = `Connected as ${name}`;
+                                    if (athleteData && athleteData.error) {
+                                        console.warn('Failed to fetch athlete info:', athleteData.error);
+                                    }
                                 }
                             })
                             .catch(error => {

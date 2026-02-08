@@ -407,10 +407,9 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
                 activities_response.raise_for_status()
                 activities = activities_response.json()
             
-            # Debug logging: log first 5 activities (if DEBUG_STRAVA env var is set)
-            debug_strava = os.getenv("DEBUG_STRAVA", "0").lower() in ("1", "true", "yes", "on")
-            if debug_strava and activities:
-                print(f"DEBUG: First {min(5, len(activities))} activities from Strava:")
+            # Always log first 5 activities for debugging (do NOT log tokens/secrets)
+            if activities:
+                print(f"INFO: First {min(5, len(activities))} activities from Strava (page 1):")
                 for i, activity in enumerate(activities[:5], 1):
                     print(f"  {i}. name={activity.get('name')}, "
                           f"start_date={activity.get('start_date')}, "
@@ -489,18 +488,34 @@ async def import_latest_activity(athlete_id: Optional[int] = None, limit: int = 
                     else:
                         activity["is_swim"] = False
             
-            # Log swim filtering results
+            # Collect distinct sport_type and type values for diagnostics
+            distinct_sport_types = set()
+            distinct_types = set()
+            for activity_data in activities:
+                if activity_data.get("sport_type"):
+                    distinct_sport_types.add(activity_data.get("sport_type"))
+                if activity_data.get("type"):
+                    distinct_types.add(activity_data.get("type"))
+            
+            # Log swim filtering results with diagnostics
             print(f"INFO: Imported {len(imported_activities)} activities, found {len(swim_activities)} swimming activities")
             if len(swim_activities) == 0 and len(imported_activities) > 0:
-                print(f"WARNING: No swimming activities found in {len(imported_activities)} activities. "
-                      f"Activity types: {[a.get('type', 'unknown') for a in imported_activities[:5]]}")
+                print(f"WARNING: No swimming activities found in {len(imported_activities)} activities from page 1. "
+                      f"Distinct sport_type values: {sorted(distinct_sport_types)}, "
+                      f"Distinct type values: {sorted(distinct_types)}")
             
             return {
                 "status": "success",
                 "count": len(imported_activities),
                 "swim_count": len(swim_activities),
+                "pages_fetched": 1,
                 "activities": imported_activities,
-                "swim_activities": swim_activities
+                "swim_activities": swim_activities,
+                "diagnostics": {
+                    "distinct_sport_types": sorted(list(distinct_sport_types)),
+                    "distinct_types": sorted(list(distinct_types)),
+                    "total_scanned": len(imported_activities)
+                } if len(swim_activities) == 0 else None
             }
         
         finally:
