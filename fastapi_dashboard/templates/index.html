@@ -678,7 +678,7 @@
         <div style="display: flex; gap: 10px; padding: 20px; background: #f8f9ff; border-bottom: 2px solid #e0e0e0;">
             <button class="tab-btn active" onclick="switchTab('single')" id="tabSingle">Single Workout</button>
             <button class="tab-btn" onclick="switchTab('compare')" id="tabCompare">Compare Workouts</button>
-            <button class="tab-btn" onclick="switchTab('strava')" id="tabStrava">Connect Strava</button>
+            <button class="tab-btn{% if strava_enabled %} strava-enabled{% endif %}" onclick="switchTab('strava')" id="tabStrava"{% if not strava_enabled %} style="display: none;"{% endif %}>Connect Strava</button>
         </div>
         
         <!-- Single Workout Section -->
