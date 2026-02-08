@@ -947,10 +947,12 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
         try:
             access_token = await ensure_valid_access_token(db, athlete_id)
             if not access_token:
+                print(f"ERROR: No valid access token found for athlete_id={athlete_id}")
                 raise HTTPException(
                     status_code=401,
                     detail="Not connected to Strava. Please connect your Strava account first."
                 )
+            print(f"INFO: Using access token for athlete_id={athlete_id} (token length: {len(access_token) if access_token else 0})")
         finally:
             db.close()
     except HTTPException:
