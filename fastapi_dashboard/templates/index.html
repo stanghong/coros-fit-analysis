@@ -2385,8 +2385,14 @@
                 });
                 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Failed to analyze activities');
+                    let errorDetail = 'Failed to analyze activities';
+                    try {
+                        const error = await response.json();
+                        errorDetail = error.detail || errorDetail;
+                    } catch (e) {
+                        errorDetail = `Server error: ${response.status} ${response.statusText}`;
+                    }
+                    throw new Error(errorDetail);
                 }
                 
                 const data = await response.json();
