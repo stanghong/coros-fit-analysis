@@ -165,6 +165,30 @@ or if tables don't exist:
 }
 ```
 
+### `GET /analytics/pmc`
+Get Performance Management Chart (PMC) data for a Strava athlete.
+
+Calculates TSS (Training Stress Score), CTL (Chronic Training Load), ATL (Acute Training Load), and TSB (Training Stress Balance).
+
+**Query Parameters:**
+- `athlete_id` (required): Strava athlete ID
+- `days` (optional): Number of days to look back (default: 180, max: 365)
+- `sport` (optional): Sport filter - 'all', 'swim', 'run', 'ride' (default: 'all')
+
+**Response**: JSON array of daily PMC data points:
+```json
+[
+  {
+    "date": "2024-01-15",
+    "tss": 45.2,
+    "ctl": 38.5,
+    "atl": 42.1,
+    "tsb": -3.6
+  },
+  ...
+]
+```
+
 ## Project Structure
 
 ```

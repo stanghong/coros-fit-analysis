@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from analysis_engine import analyze_workout
 from comparison_engine import analyze_multiple_workouts
+from pmc_calculator import calculate_pmc
 
 # Import database dependencies
 try:
@@ -704,6 +705,85 @@ async def get_activities(athlete_id: Optional[int] = None, limit: int = 10):
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving activities: {str(e)}"
+        )
+
+
+@app.get("/analytics/pmc")
+async def get_pmc_data(athlete_id: Optional[int] = None, days: int = 180, sport: str = "all"):
+    """
+    Get Performance Management Chart (PMC) data for a Strava athlete.
+    
+    Calculates TSS, CTL (42-day EMA), ATL (7-day EMA), and TSB (CTL - ATL).
+    
+    Args:
+        athlete_id: Strava athlete ID (query parameter, required)
+        days: Number of days to look back (default: 180, max: 365)
+        sport: Sport filter - 'all', 'swim', 'run', 'ride' (default: 'all')
+        
+    Returns:
+        JSON array of daily PMC data points:
+        [
+            {
+                "date": "YYYY-MM-DD",
+                "tss": float,
+                "ctl": float,
+                "atl": float,
+                "tsb": float
+            },
+            ...
+        ]
+    """
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    if days < 1 or days > 365:
+        raise HTTPException(
+            status_code=400,
+            detail="days must be between 1 and 365"
+        )
+    
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. PMC calculation requires database."
+        )
+    
+    try:
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # Find user by athlete_id
+            user = db.query(User).filter(User.strava_athlete_id == athlete_id).first()
+            
+            if not user:
+                # Return empty series if user not found
+                return []
+            
+            # Calculate PMC data
+            pmc_data = calculate_pmc(
+                db=db,
+                user_id=user.id,
+                days=days,
+                sport_filter=sport
+            )
+            
+            return pmc_data
+            
+        finally:
+            db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calculating PMC data: {str(e)}\n\n{traceback.format_exc()}"
         )
 
 
