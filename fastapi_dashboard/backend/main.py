@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from analysis_engine import analyze_workout
 from comparison_engine import analyze_multiple_workouts
 from pmc_calculator import calculate_pmc
+from running_analysis import analyze_running_strengths_gaps
 
 # Import database dependencies
 try:
@@ -784,6 +785,91 @@ async def get_pmc_data(athlete_id: Optional[int] = None, days: int = 180, sport:
         raise HTTPException(
             status_code=500,
             detail=f"Error calculating PMC data: {str(e)}\n\n{traceback.format_exc()}"
+        )
+
+
+@app.get("/analytics/running-insights")
+async def get_running_insights(athlete_id: Optional[int] = None, days: int = 90):
+    """
+    Get running-specific analysis with strengths and gaps identification.
+    
+    Analyzes running activities to provide coach insights on:
+    - Pace trends and consistency
+    - Training volume and frequency
+    - Workout variety
+    - Performance gaps
+    
+    Args:
+        athlete_id: Strava athlete ID (query parameter, required)
+        days: Number of days to analyze (default: 90, max: 365)
+        
+    Returns:
+        JSON with analysis results:
+        {
+            "strengths": [...],
+            "gaps": [...],
+            "metrics": {...},
+            "recommendations": [...],
+            "total_runs": int,
+            "period_days": int
+        }
+    """
+    if not athlete_id:
+        raise HTTPException(
+            status_code=400,
+            detail="athlete_id query parameter is required"
+        )
+    
+    if days < 1 or days > 365:
+        raise HTTPException(
+            status_code=400,
+            detail="days must be between 1 and 365"
+        )
+    
+    if not DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not available. Running analysis requires database."
+        )
+    
+    try:
+        # Get database session
+        db_gen = get_db()
+        db = next(db_gen)
+        
+        try:
+            # Find user by athlete_id
+            user = db.query(User).filter(User.strava_athlete_id == athlete_id).first()
+            
+            if not user:
+                return {
+                    "strengths": [],
+                    "gaps": ["No athlete found. Please connect to Strava first."],
+                    "metrics": {},
+                    "recommendations": [],
+                    "total_runs": 0,
+                    "period_days": days
+                }
+            
+            # Analyze running activities
+            analysis = analyze_running_strengths_gaps(
+                db=db,
+                user_id=user.id,
+                days=days
+            )
+            
+            return analysis
+            
+        finally:
+            db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error analyzing running data: {str(e)}\n\n{traceback.format_exc()}"
         )
 
 
