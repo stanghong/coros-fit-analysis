@@ -912,7 +912,7 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
         if str(backend_dir) not in sys.path:
             sys.path.insert(0, str(backend_dir))
         
-        from strava_converter import strava_streams_to_dataframe, is_swimming_activity
+        from strava_converter import strava_streams_to_dataframe
         from comparison_engine import analyze_multiple_workouts
         
         all_dataframes = []
@@ -927,9 +927,9 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
                 activity_response.raise_for_status()
                 activity = activity_response.json()
                 
-                # Check if it's a swimming activity
-                if not is_swimming_activity(activity):
-                    continue  # Skip non-swimming activities
+                # Log activity type for debugging (multi-sport support)
+                sport_type = activity.get('sport_type', activity.get('type', 'unknown'))
+                print(f"INFO: Processing activity {activity_id} for comparison, sport_type: {sport_type}")
                 
                 # Fetch activity streams
                 streams_response = await client.get(
@@ -962,7 +962,7 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
         if len(all_dataframes) < 2:
             raise HTTPException(
                 status_code=400,
-                detail=f"Not enough valid swimming activities found. Need at least 2, found {len(all_dataframes)}"
+                detail=f"Not enough valid activities found. Need at least 2, found {len(all_dataframes)}"
             )
         
         # Analyze using comparison engine
@@ -1039,7 +1039,7 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
         if str(backend_dir) not in sys.path:
             sys.path.insert(0, str(backend_dir))
         
-        from strava_converter import strava_streams_to_dataframe, is_swimming_activity
+        from strava_converter import strava_streams_to_dataframe
         from analysis_engine import analyze_workout
         
         async with httpx.AsyncClient() as client:
@@ -1067,12 +1067,9 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
             activity_response.raise_for_status()
             activity = activity_response.json()
             
-            # Check if it's a swimming activity
-            if not is_swimming_activity(activity):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"This activity is {activity.get('sport_type', 'unknown')}, not a swimming workout."
-                )
+            # Log activity type for debugging (multi-sport support)
+            sport_type = activity.get('sport_type', activity.get('type', 'unknown'))
+            print(f"INFO: Analyzing activity {activity_id}, sport_type: {sport_type}")
             
             # Fetch activity streams (detailed time-series data)
             streams_response = await client.get(
