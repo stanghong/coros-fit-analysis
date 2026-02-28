@@ -29,6 +29,8 @@ router = APIRouter(prefix="/strava", tags=["strava"])
 STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID", "")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET", "")
 STRAVA_REDIRECT_URI = os.getenv("STRAVA_REDIRECT_URI", "")
+ENV = os.getenv("ENV", "").lower()
+IS_DEV = ENV == "dev"
 
 # In-memory token storage (in production, use database or secure storage)
 # Key: user_id (for now, using session or simple identifier)
@@ -96,10 +98,10 @@ async def strava_callback(
     # IMPORTANT: The redirect_uri must match EXACTLY what was used in the authorization request
     # Also, authorization codes can only be used once and expire quickly
     try:
-        # Log the redirect URI being used for debugging (but not secrets)
-        print(f"DEBUG: Using redirect_uri: {STRAVA_REDIRECT_URI}")
-        print(f"DEBUG: Client ID: {STRAVA_CLIENT_ID}")
-        print(f"DEBUG: Code received: {code[:20]}...")
+        # Log OAuth context only in dev (never log authorization code)
+        if IS_DEV:
+            print(f"DEBUG: Using redirect_uri: {STRAVA_REDIRECT_URI}")
+            print(f"DEBUG: OAuth callback received")
         
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
@@ -197,9 +199,25 @@ async def strava_callback(
                     finally:
                         db.close()
                 except Exception as e:
-                    # Log error but don't fail the OAuth flow
+                    # Log error but don't fail OAuth in dev; in prod require DB persistence
                     print(f"WARNING: Failed to persist tokens to database: {str(e)}")
-                    # Fall back to in-memory storage
+                    if IS_DEV:
+                        user_id = "default_user"
+                        strava_tokens[user_id] = {
+                            "access_token": token_data.get("access_token"),
+                            "refresh_token": token_data.get("refresh_token"),
+                            "expires_at": token_data.get("expires_at"),
+                            "athlete": athlete
+                        }
+                    else:
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Failed to persist Strava token. Database is required in production."
+                        )
+            else:
+                # In production, require database persistence for Strava OAuth
+                if IS_DEV:
+                    print("WARNING: Database not available, storing tokens in-memory only")
                     user_id = "default_user"
                     strava_tokens[user_id] = {
                         "access_token": token_data.get("access_token"),
@@ -207,16 +225,11 @@ async def strava_callback(
                         "expires_at": token_data.get("expires_at"),
                         "athlete": athlete
                     }
-            else:
-                # Fall back to in-memory storage if database not available
-                print("WARNING: Database not available, storing tokens in-memory only")
-                user_id = "default_user"
-                strava_tokens[user_id] = {
-                    "access_token": token_data.get("access_token"),
-                    "refresh_token": token_data.get("refresh_token"),
-                    "expires_at": token_data.get("expires_at"),
-                    "athlete": athlete
-                }
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Database not available. Strava OAuth requires database in production."
+                    )
             
             # Return simple HTML success page with auto-redirect
             return HTMLResponse(content=f"""
@@ -654,16 +667,21 @@ async def strava_status():
         except Exception as e:
             print(f"WARNING: Error checking database for Strava status: {e}")
     
-    # Fall back to in-memory storage
-    user_id = "default_user"  # TODO: Get from session
-    
-    is_connected = user_id in strava_tokens and strava_tokens[user_id].get("access_token")
-    athlete_data = strava_tokens[user_id].get("athlete", {}) if is_connected else None
-    
+    # In-memory fallback is for local dev only
+    if IS_DEV:
+        user_id = "default_user"
+        is_connected = user_id in strava_tokens and strava_tokens[user_id].get("access_token")
+        athlete_data = strava_tokens[user_id].get("athlete", {}) if is_connected else None
+        return {
+            "connected": is_connected,
+            "athlete_id": athlete_data.get("id") if athlete_data else None,
+            "athlete": athlete_data
+        }
+
     return {
-        "connected": is_connected,
-        "athlete_id": athlete_data.get("id") if athlete_data else None,
-        "athlete": athlete_data
+        "connected": False,
+        "athlete_id": None,
+        "athlete": None
     }
 
 
@@ -684,6 +702,9 @@ async def debug_strava_athlete(athlete_id: Optional[int] = None):
             "lastname": str
         }
     """
+    if not IS_DEV:
+        raise HTTPException(status_code=404, detail="Not found")
+
     if not DB_AVAILABLE:
         return JSONResponse(
             status_code=503,
@@ -854,9 +875,9 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
             raise HTTPException(status_code=400, detail="Request body must be a JSON array of activity IDs")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid request body: {str(e)}")
-    
+
     access_token = None
-    
+
     # Try database first if athlete_id is provided and DB is available
     if athlete_id and DB_AVAILABLE:
         try:
@@ -870,11 +891,11 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
                 db.close()
         except Exception as e:
             print(f"WARNING: Failed to get token from database: {str(e)}, falling back to in-memory")
-    
-    # Fallback to in-memory tokens (backward compatibility)
-    if not access_token:
-        user_id = "default_user"  # TODO: Get from session
-        
+
+    # Fallback to in-memory tokens is allowed only in local dev
+    if not access_token and IS_DEV:
+        user_id = "default_user"
+
         if user_id in strava_tokens:
             tokens = strava_tokens[user_id]
             access_token = tokens.get("access_token")
@@ -991,10 +1012,10 @@ async def analyze_multiple_strava_activities(request: Request, athlete_id: Optio
 async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = None):
     """
     Fetch Strava activity streams and analyze using workout analysis engine.
-    Supports both database-backed tokens (if athlete_id provided) and in-memory tokens (fallback).
+    Supports both database-backed tokens (if athlete_id provided) and in-memory tokens (dev fallback only).
     """
     access_token = None
-    
+
     # Try database first if athlete_id is provided and DB is available
     if athlete_id and DB_AVAILABLE:
         try:
@@ -1008,11 +1029,11 @@ async def analyze_strava_activity(activity_id: int, athlete_id: Optional[int] = 
                 db.close()
         except Exception as e:
             print(f"WARNING: Failed to get token from database: {str(e)}, falling back to in-memory")
-    
-    # Fallback to in-memory tokens (backward compatibility)
-    if not access_token:
-        user_id = "default_user"  # TODO: Get from session
-        
+
+    # Fallback to in-memory tokens is allowed only in local dev
+    if not access_token and IS_DEV:
+        user_id = "default_user"
+
         if user_id in strava_tokens:
             tokens = strava_tokens[user_id]
             access_token = tokens.get("access_token")

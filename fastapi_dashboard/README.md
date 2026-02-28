@@ -217,19 +217,29 @@ The application integrates with Strava API to:
 Set these in your `.env` file or Render environment:
 
 ```bash
+# Runtime mode
+ENV=dev  # use prod (or non-dev) in production
+
+# CORS allowlist (comma-separated)
+CORS_ALLOW_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+# Production example:
+# CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com
+
+# Strava
 STRAVA_ENABLED=true
 STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
 STRAVA_REDIRECT_URI=http://localhost:8000/strava/callback  # Local
 # or
-STRAVA_REDIRECT_URI=https://your-app.onrender.com/strava/callback  # Production
+# STRAVA_REDIRECT_URI=https://your-app.onrender.com/strava/callback  # Production
 STRAVA_SCOPE=read,activity:read_all
 
 # Optional: Enable background sync
 BACKGROUND_SYNC_ENABLED=true
 ```
 
-See `RENDER_STRAVA_SETUP.md` for detailed setup instructions.
+Use `.env.example` as a baseline for local setup.  
+See `RENDER_STRAVA_SETUP.md` for Strava setup and `SECURITY_NOTES.md` for security defaults.
 
 ## Notes
 

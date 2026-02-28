@@ -2,7 +2,7 @@
 FastAPI backend for swimming workout dashboard.
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -65,10 +65,21 @@ except ImportError:
 
 app = FastAPI(title="Swimming Workout Dashboard", version="1.0.0")
 
+# Environment
+ENV = os.getenv("ENV", "").lower()
+IS_DEV = ENV == "dev"
+
 # Add CORS middleware
+# Configure with CORS_ALLOW_ORIGINS="https://app.example.com,https://admin.example.com"
+_cors_origins_raw = os.getenv("CORS_ALLOW_ORIGINS", "")
+CORS_ALLOW_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+
+if not CORS_ALLOW_ORIGINS:
+    CORS_ALLOW_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"] if IS_DEV else []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=CORS_ALLOW_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -189,6 +200,9 @@ async def debug_strava_athlete(athlete_id: Optional[int] = None):
         }
     """
     # Import here to avoid circular dependencies
+    if not IS_DEV:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     if not STRAVA_ENABLED:
         return JSONResponse(
             status_code=503,
@@ -306,8 +320,7 @@ else:
     print("INFO: Strava integration is disabled via STRAVA_ENABLED environment variable.")
 
 # Import dev routes only when ENV=dev
-ENV = os.getenv("ENV", "").lower()
-if ENV == "dev":
+if IS_DEV:
     try:
         try:
             from .dev_routes import router as dev_router

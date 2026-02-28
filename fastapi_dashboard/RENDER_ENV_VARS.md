@@ -22,7 +22,9 @@ Make sure these are set in your Render service's **Environment** tab:
 - ✅ `STRAVA_SCOPE` - OAuth scope (e.g., `activity:read_all`)
 
 ### Optional
-- `ENV=prod` - Set to `prod` for production (dev routes will be disabled)
+- `ENV=prod` - Set to `prod` for production (dev-only routes and in-memory token fallback disabled)
+- `CORS_ALLOW_ORIGINS` - Comma-separated frontend origins allowlist
+  - Example: `CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com`
 - `PORT` - Automatically set by Render (don't override)
 
 ## How to Set Environment Variables in Render
